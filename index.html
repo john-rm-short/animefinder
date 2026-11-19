@@ -1,0 +1,1335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AnimeFinder — Main Hub &amp; Daily Utility</title>
+  <meta name="description" content="Zero-build static anime discovery, live releases, 7-day Mon–Sun schedule, personal watchlist, radar, and studio/year archives.">
+  <meta name="theme-color" content="#090d1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AnimeFinder">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icon.svg">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div id="af-nav-host"></div>
+
+  <main class="container" id="main-content">
+    <!-- Global AniList Search (/) -->
+    <section class="global-search-wrap" aria-label="Global Anime Search">
+      <div class="global-search-bar">
+        <span aria-hidden="true" style="color:var(--text-muted);font-size:16px;">🔍</span>
+        <input id="globalSearchInput" type="search" placeholder="Search any anime on AniList, jump to Vibe Graph or Arithmetic..." autocomplete="off" aria-label="Search anime on AniList">
+        <span class="kbd" title="Press / to focus search">/</span>
+        <button type="button" class="btn btn-sm btn-cyan" id="quickVibeJumpBtn" title="Search this prompt in Vibe & Taste Graph">Vibe Search ↗</button>
+      </div>
+      <div id="globalSearchDropdown" class="search-dropdown" role="listbox" aria-label="Search suggestions"></div>
+    </section>
+
+    <!-- Main Hub Navigation Tabs -->
+    <div class="tabs-bar" role="tablist" aria-label="Main Hub Sections">
+      <button type="button" class="tab-btn active" role="tab" aria-selected="true" data-tab="releases">🔥 Releases &amp; Platforms</button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="schedule">📅 7-Day Schedule</button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="saved">⭐ Saved &amp; Sync</button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="radar">📡 Radar (Upcoming · ANN · YT)</button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="archives">🏛️ Archives (Year &amp; Studio)</button>
+    </div>
+
+    <!-- TAB 1: RELEASES -->
+    <section id="tab-releases" class="tab-panel" role="tabpanel">
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Live Releases &amp; Multi-Platform Catalog</h2>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">
+              Blends past-72h simulcasts (&lt;24h highlighted), active batch/ONA drops, and server-side AniList <code>licensedBy_in</code> catalogs across 11 platforms.
+            </div>
+          </div>
+          <div class="meta-row">
+            <select id="dubFilterSelect" class="select" aria-label="Filter by Dub status">
+              <option value="all">Dub: All</option>
+              <option value="dubbed">Dubbed / Simuldub</option>
+              <option value="sub">Sub Only</option>
+            </select>
+            <button type="button" class="btn btn-sm btn-cyan" id="batchTmdbBtn" title="Enrich visible cards with TMDB US JustWatch providers">TMDB US Batch Enrich</button>
+            <button type="button" class="btn btn-sm" id="refreshReleasesBtn">↻ Refresh</button>
+          </div>
+        </div>
+        <div class="pills-row" id="platformFilterBar" aria-label="Streaming platform filters"></div>
+      </div>
+      <div id="releasesMeta" style="font-size:12.5px;color:var(--text-muted);margin-bottom:10px;"></div>
+      <div id="releasesGrid" class="anime-grid"></div>
+    </section>
+
+    <!-- TAB 2: 7-DAY SCHEDULE -->
+    <section id="tab-schedule" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-header" style="margin-bottom:0;">
+          <div>
+            <h2 class="panel-title">7-Day Local Broadcast Schedule (Mon – Sun)</h2>
+            <div id="scheduleRangeLabel" style="font-size:12px;color:var(--text-muted);margin-top:2px;">Loading local week bounds...</div>
+          </div>
+          <div class="meta-row">
+            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-muted);cursor:pointer;">
+              <input type="checkbox" id="scheduleWatchlistOnly"> Watchlist only
+            </label>
+            <button type="button" class="btn btn-sm" id="refreshScheduleBtn">↻ Refresh</button>
+          </div>
+        </div>
+      </div>
+      <div id="scheduleGrid" class="schedule-grid"></div>
+    </section>
+
+    <!-- TAB 3: SAVED WATCHLIST & SYNC -->
+    <section id="tab-saved" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Personal Watchlist</h2>
+            <div id="watchlistSummary" style="font-size:12px;color:var(--text-muted);margin-top:2px;">0 titles saved in shared origin storage</div>
+          </div>
+          <div class="meta-row">
+            <a class="btn btn-primary btn-sm" href="./vibe-graph.html?mode=watchlist">Map Watchlist Constellation ↗</a>
+            <select id="wlSortSelect" class="select" aria-label="Sort watchlist">
+              <option value="updated">Sort: Recently Updated</option>
+              <option value="rating">Sort: My Rating</option>
+              <option value="score">Sort: AniList Score</option>
+              <option value="title">Sort: Title (A–Z)</option>
+            </select>
+          </div>
+        </div>
+        <div class="pills-row" id="wlStatusPills" aria-label="Watchlist status filters"></div>
+      </div>
+
+      <div id="watchlistGrid" class="anime-grid" style="margin-bottom:24px;"></div>
+
+      <!-- Persistence, Gist Sync, AniList Importer & API Keys -->
+      <div class="grid-2">
+        <!-- Private GitHub Gist Auto-Sync -->
+        <div class="panel">
+          <div class="panel-header">
+            <h3 class="panel-title">Private GitHub Gist Auto-Sync</h3>
+            <span class="badge badge-cyan" id="gistStatusBadge">Standardized: animefinder-sync.json</span>
+          </div>
+          <p style="font-size:12px;color:var(--text-muted);margin-top:0;">
+            GitHub Pages shares storage automatically across all 3 pages on the same browser. Configure a Private Gist (PAT scoped strictly to <code>gist</code>) for cross-device auto-pull on boot and 1.5s debounced auto-push with tombstone conflict resolution.
+          </p>
+          <div class="form-grid" style="margin-bottom:10px;">
+            <div class="form-field">
+              <label for="gistTokenInput">GitHub Personal Access Token (gist scope)</label>
+              <input id="gistTokenInput" type="password" class="input input-full" placeholder="ghp_... or github_pat_...">
+            </div>
+            <div class="form-field">
+              <label for="gistIdInput">Gist ID (leave blank to create new)</label>
+              <input id="gistIdInput" type="text" class="input input-full" placeholder="32-char hex Gist ID">
+            </div>
+          </div>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-muted);margin-bottom:12px;cursor:pointer;">
+            <input type="checkbox" id="gistAutoSyncCheck" checked> Enable auto-pull on boot &amp; 1.5s debounced auto-push
+          </label>
+          <div class="meta-row">
+            <button type="button" class="btn btn-primary btn-sm" id="saveGistConfigBtn">Save Gist Config</button>
+            <button type="button" class="btn btn-emerald btn-sm" id="createGistBtn">+ Create Private Gist</button>
+            <button type="button" class="btn btn-sm" id="pullGistBtn">↓ Pull Now</button>
+            <button type="button" class="btn btn-sm" id="pushGistBtn">↑ Push Now</button>
+          </div>
+          <div id="gistLastSyncLabel" style="font-size:11.5px;color:var(--text-dim);margin-top:8px;"></div>
+        </div>
+
+        <!-- AniList Username Importer (P2) & TMDB Key -->
+        <div class="panel">
+          <div class="panel-header">
+            <h3 class="panel-title">AniList Importer, TMDB &amp; Cache</h3>
+            <span class="badge badge-purple">P2 Ready</span>
+          </div>
+          <div class="form-field" style="margin-bottom:14px;">
+            <label for="anilistImportUser">Read-Only AniList Username Import (<code>MediaListCollection</code>)</label>
+            <div style="display:flex;gap:8px;">
+              <input id="anilistImportUser" type="text" class="input input-full" placeholder="e.g. your public AniList username">
+              <button type="button" class="btn btn-cyan btn-sm" id="importAnilistBtn">Import Watchlist</button>
+            </div>
+          </div>
+          <div class="form-field" style="margin-bottom:14px;">
+            <label for="tmdbKeyInput">Optional TMDB API Key (US JustWatch Providers)</label>
+            <div style="display:flex;gap:8px;">
+              <input id="tmdbKeyInput" type="password" class="input input-full" placeholder="TMDB v3 API key (stored locally only)">
+              <button type="button" class="btn btn-sm" id="saveTmdbKeyBtn">Save Key</button>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <div id="cacheStatsLabel" style="font-size:12px;color:var(--text-muted);">IndexedDB cache: checking...</div>
+            <div class="meta-row">
+              <button type="button" class="btn btn-xs" id="clearApiCacheBtn">Clear API Cache</button>
+              <button type="button" class="btn btn-xs btn-danger" id="clearAllCacheBtn">Clear All + Vectors</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Portable Sync Codes & JSON Backup -->
+        <div class="panel" style="grid-column: 1 / -1;">
+          <div class="panel-header">
+            <h3 class="panel-title">Portable Sync Codes (UTF-8 TextEncoder) &amp; JSON Backups</h3>
+            <span class="badge badge-emerald">Secrets stripped from Sync Codes</span>
+          </div>
+          <div class="grid-2">
+            <div>
+              <div class="meta-row" style="margin-bottom:8px;">
+                <button type="button" class="btn btn-sm btn-cyan" id="genSyncCodeBtn">Generate Sync Code</button>
+                <button type="button" class="btn btn-sm" id="copySyncUrlBtn">Copy #sync= Share URL</button>
+                <button type="button" class="btn btn-sm" id="exportJsonBtn">Export JSON</button>
+                <label class="btn btn-sm" style="margin:0;">
+                  Import JSON <input type="file" id="importJsonFile" accept="application/json" hidden>
+                </label>
+              </div>
+              <textarea id="syncCodeOutput" class="textarea" readonly placeholder="Click 'Generate Sync Code' to create a portable UTF-8 Base64 snapshot (no API keys included)..."></textarea>
+            </div>
+            <div>
+              <div class="meta-row" style="margin-bottom:8px;">
+                <button type="button" class="btn btn-sm btn-emerald" id="applySyncCodeBtn">Merge Sync Code</button>
+              </div>
+              <textarea id="syncCodeInput" class="textarea" placeholder="Paste a Sync Code from another device here to merge Watchlist &amp; overrides..."></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: RADAR -->
+    <section id="tab-radar" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel" style="margin-bottom:18px;">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Upcoming Anime Radar</h2>
+            <div style="font-size:12px;color:var(--text-muted);">Most anticipated upcoming releases (<code>NOT_YET_RELEASED</code>)</div>
+          </div>
+          <button type="button" class="btn btn-sm" id="refreshUpcomingBtn">↻ Refresh</button>
+        </div>
+        <div id="upcomingGrid" class="anime-grid"></div>
+      </div>
+
+      <div class="grid-2">
+        <!-- ANN RSS -->
+        <div class="panel">
+          <div class="panel-header">
+            <h3 class="panel-title">Anime News Network (ANN RSS)</h3>
+            <div class="meta-row">
+              <button type="button" class="btn btn-xs" id="refreshAnnBtn">↻ Reload</button>
+              <a class="btn btn-xs btn-cyan" href="https://www.animenewsnetwork.com/news/" target="_blank" rel="noopener">Open ANN ↗</a>
+            </div>
+          </div>
+          <div id="annNewsList" style="display:flex;flex-direction:column;gap:10px;max-height:460px;overflow-y:auto;"></div>
+        </div>
+
+        <!-- YouTube Hunter -->
+        <div class="panel">
+          <div class="panel-header">
+            <h3 class="panel-title">YouTube Hunter (Trailers · OPs · Reviews)</h3>
+            <a id="ytDirectLink" class="btn btn-xs btn-cyan" href="https://www.youtube.com/results?search_query=anime+pv+trailer+2026" target="_blank" rel="noopener">Open on YouTube ↗</a>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;">
+            <input id="ytSearchInput" type="search" class="input input-full" value="anime official trailer PV" placeholder="Search anime trailers, sakuga, OPs...">
+            <button type="button" class="btn btn-primary btn-sm" id="ytSearchBtn">Hunt</button>
+          </div>
+          <div class="pills-row" style="margin-bottom:12px;">
+            <button type="button" class="pill yt-preset" data-q="anime official trailer PV 2026">2026 PVs</button>
+            <button type="button" class="pill yt-preset" data-q="anime opening OP creditless">Creditless OPs</button>
+            <button type="button" class="pill yt-preset" data-q="anime sakuga MAD animation">Sakuga</button>
+            <button type="button" class="pill yt-preset" data-q="hidden gem anime recommendations">Hidden Gems</button>
+          </div>
+          <div id="ytResultsList" style="display:flex;flex-direction:column;gap:10px;max-height:400px;overflow-y:auto;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: ARCHIVES -->
+    <section id="tab-archives" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-header">
+          <div class="pills-row" role="tablist" aria-label="Archive mode">
+            <button type="button" class="pill active" id="archiveModeYear">📅 By Year (1970–2026)</button>
+            <button type="button" class="pill" id="archiveModeStudio">🎬 By Studio (up to 75 titles)</button>
+          </div>
+        </div>
+
+        <!-- By Year Controls -->
+        <div id="archiveYearControls">
+          <div class="meta-row" style="margin-bottom:10px;">
+            <label for="archiveYearSelect" style="font-size:12.5px;color:var(--text-muted);">Year:</label>
+            <select id="archiveYearSelect" class="select"></select>
+            <select id="archiveFormatSelect" class="select" aria-label="Format filter">
+              <option value="">All Formats</option>
+              <option value="TV">TV</option>
+              <option value="MOVIE">Movie</option>
+              <option value="OVA">OVA</option>
+              <option value="ONA">ONA</option>
+            </select>
+            <select id="archiveSortSelect" class="select" aria-label="Sort archive">
+              <option value="SCORE_DESC">Top Rated</option>
+              <option value="POPULARITY_DESC">Most Popular</option>
+            </select>
+            <button type="button" class="btn btn-primary btn-sm" id="loadYearArchiveBtn">Browse Year</button>
+          </div>
+          <div class="pills-row" id="decadeQuickPills"></div>
+        </div>
+
+        <!-- By Studio Controls -->
+        <div id="archiveStudioControls" hidden>
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <input id="studioSearchInput" type="search" class="input" style="flex:1;min-width:220px;" placeholder="Search any anime studio (e.g. Kyoto Animation, Madhouse, Gainax)...">
+            <button type="button" class="btn btn-primary btn-sm" id="searchStudioBtn">Search Studio</button>
+          </div>
+          <div class="pills-row" id="curatedStudiosBar"></div>
+        </div>
+      </div>
+
+      <div id="archivesMeta" style="font-size:12.5px;color:var(--text-muted);margin-bottom:10px;"></div>
+      <div id="archivesGrid" class="anime-grid"></div>
+    </section>
+  </main>
+
+  <script src="./shared-core.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      const AF = window.AnimeFinderCore;
+      AF.mountNav('hub');
+
+      // ----------------------------------------------------------------------
+      // State & Tab Management
+      // ----------------------------------------------------------------------
+      let activeTab = 'releases';
+      let activePlatform = 'all'; // 'all' | 'free' | platformId
+      let activeDubFilter = 'all';
+      let releasesCache = [];
+      let tmdbExtraByAnimeId = new Map();
+      let scheduleCache = [];
+      let wlFilterStatus = 'All';
+      let archiveMode = 'year';
+      let loadedTabs = new Set();
+
+      const CURATED_STUDIOS = [
+        'Kyoto Animation', 'Studio Ghibli', 'Madhouse', 'MAPPA', 'Bones',
+        'Gainax', 'Trigger', 'Shaft', 'ufotable', 'Production I.G',
+        'Wit Studio', 'Science SARU', 'Sunrise', 'CoMix Wave Films'
+      ];
+
+      function switchTab(tabName) {
+        activeTab = tabName;
+        document.querySelectorAll('.tabs-bar .tab-btn').forEach(btn => {
+          const isAct = btn.dataset.tab === tabName;
+          btn.classList.toggle('active', isAct);
+          btn.setAttribute('aria-selected', String(isAct));
+        });
+        document.querySelectorAll('.tab-panel').forEach(sec => {
+          sec.hidden = sec.id !== `tab-${tabName}`;
+        });
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', tabName);
+        history.replaceState(null, '', url.toString());
+
+        if (!loadedTabs.has(tabName)) {
+          loadedTabs.add(tabName);
+          if (tabName === 'releases') loadReleases();
+          if (tabName === 'schedule') loadSchedule();
+          if (tabName === 'saved') renderSavedTab();
+          if (tabName === 'radar') { loadUpcomingRadar(); loadAnnNews(); huntYouTube(); }
+          if (tabName === 'archives') loadYearArchive();
+        } else if (tabName === 'saved') {
+          renderSavedTab();
+        }
+      }
+
+      document.querySelectorAll('.tabs-bar .tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+      });
+
+      // ----------------------------------------------------------------------
+      // Global AniList Search (/)
+      // ----------------------------------------------------------------------
+      const searchInput = document.getElementById('globalSearchInput');
+      const searchDropdown = document.getElementById('globalSearchDropdown');
+      let searchTimer = null;
+
+      document.addEventListener('keydown', (ev) => {
+        if (ev.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+          ev.preventDefault();
+          searchInput.focus();
+          searchInput.select();
+        } else if (ev.key === 'Escape') {
+          searchDropdown.classList.remove('open');
+        }
+      });
+
+      document.addEventListener('click', (ev) => {
+        if (!ev.target.closest('.global-search-wrap')) {
+          searchDropdown.classList.remove('open');
+        }
+      });
+
+      searchInput.addEventListener('input', () => {
+        const q = searchInput.value.trim();
+        if (searchTimer) clearTimeout(searchTimer);
+        if (q.length < 2) {
+          searchDropdown.classList.remove('open');
+          return;
+        }
+        searchTimer = setTimeout(async () => {
+          searchDropdown.innerHTML = `<div style="padding:14px;color:var(--text-muted);"><span class="spinner"></span> Searching AniList...</div>`;
+          searchDropdown.classList.add('open');
+          try {
+            const results = await AF.searchAnimeQuick(q, 8);
+            if (!results.length) {
+              searchDropdown.innerHTML = `<div style="padding:14px;color:var(--text-muted);">No titles matched "${AF.escapeHtml(q)}".</div>`;
+              return;
+            }
+            searchDropdown.innerHTML = results.map(m => {
+              const title = AF.getDisplayTitle(m);
+              const wl = AF.getState().watchlist[m.id];
+              return `
+                <div class="search-item" data-id="${m.id}" role="option">
+                  <img src="${AF.escapeHtml(AF.getCover(m))}" alt="">
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-weight:700;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${AF.escapeHtml(title)}</div>
+                    <div style="font-size:11.5px;color:var(--text-muted);">
+                      ${AF.escapeHtml(m.format || '')} ${m.seasonYear ? '· ' + m.seasonYear : ''} ${m.averageScore ? '· ★ ' + m.averageScore + '%' : ''}
+                      ${wl ? `· <span style="color:var(--emerald);">${AF.escapeHtml(wl.status)}</span>` : ''}
+                    </div>
+                  </div>
+                  <a class="btn btn-xs btn-cyan" href="./vibe-graph.html?seed=${m.id}" onclick="event.stopPropagation();">Graph</a>
+                  <a class="btn btn-xs" href="./eclectic-lab.html?tab=arithmetic&seed=${m.id}" onclick="event.stopPropagation();">± Arith</a>
+                </div>
+              `;
+            }).join('');
+            searchDropdown.querySelectorAll('.search-item').forEach((row, idx) => {
+              row.addEventListener('click', () => {
+                searchDropdown.classList.remove('open');
+                AF.openDetailModal(results[idx]);
+              });
+            });
+          } catch (err) {
+            searchDropdown.innerHTML = `<div style="padding:14px;color:var(--rose);">Search failed: ${AF.escapeHtml(err.message)}</div>`;
+          }
+        }, 320);
+      });
+
+      document.getElementById('quickVibeJumpBtn').addEventListener('click', () => {
+        const q = searchInput.value.trim();
+        window.location.href = q ? `./vibe-graph.html?vibe=${encodeURIComponent(q)}` : './vibe-graph.html';
+      });
+
+      // ----------------------------------------------------------------------
+      // Card Renderer (Reusable across Releases, Saved, Radar, Archives)
+      // ----------------------------------------------------------------------
+      function renderAnimeCard(anime, options = {}) {
+        const state = AF.getState();
+        const wl = state.watchlist[anime.id];
+        const title = AF.getDisplayTitle(anime);
+        const cover = AF.getCover(anime);
+        const extra = tmdbExtraByAnimeId.get(anime.id) || [];
+        const platforms = AF.detectPlatforms(anime, extra);
+        const dub = AF.classifyDub(anime, platforms);
+        const freeAds = AF.isFreeWithAds(anime, platforms);
+
+        const topLeftBadges = [];
+        if (options.airingBadge) topLeftBadges.push(options.airingBadge);
+        else if (anime.format) topLeftBadges.push(`<span class="badge badge-muted">${AF.escapeHtml(anime.format)}</span>`);
+        if (wl) topLeftBadges.push(`<span class="badge badge-emerald">${AF.escapeHtml(wl.status)}</span>`);
+
+        const topRight = anime.averageScore
+          ? `<span class="badge badge-accent">★ ${anime.averageScore}%</span>`
+          : '';
+
+        const bottomBadges = [];
+        bottomBadges.push(`<span class="badge badge-cyan">${AF.escapeHtml(dub)}</span>`);
+        if (freeAds) bottomBadges.push(`<span class="badge badge-amber">Free w/ Ads</span>`);
+        if (options.extraBadge) bottomBadges.push(options.extraBadge);
+
+        return `
+          <article class="anime-card" tabindex="0" data-anime-id="${anime.id}" aria-label="${AF.escapeHtml(title)}">
+            <div class="anime-card-cover-wrap">
+              <img class="anime-card-cover" src="${AF.escapeHtml(cover)}" alt="${AF.escapeHtml(title)}" loading="lazy">
+              <div class="anime-card-overlay-top">
+                <div style="display:flex;flex-wrap:wrap;gap:4px;">${topLeftBadges.join('')}</div>
+                <div>${topRight}</div>
+              </div>
+              <div class="anime-card-overlay-bottom">${bottomBadges.join('')}</div>
+            </div>
+            <div class="anime-card-body">
+              <h3 class="anime-card-title" title="${AF.escapeHtml(title)}">${AF.escapeHtml(title)}</h3>
+              <div class="anime-card-meta">
+                <span>${AF.escapeHtml((anime.studios?.nodes?.[0]?.name || (anime.genres || []).slice(0, 2).join(', ') || 'Anime'))}</span>
+                <span>${anime.seasonYear || (anime.episodes ? anime.episodes + ' eps' : '')}</span>
+              </div>
+              ${options.watchlistControls ? options.watchlistControls : `
+                <div class="anime-card-platforms">
+                  ${platforms.slice(0, 3).map(p => `<span class="platform-tag" style="color:${p.color};border-color:${p.color}55;">${AF.escapeHtml(p.name)}</span>`).join('')}
+                  ${platforms.length > 3 ? `<span class="platform-tag">+${platforms.length - 3}</span>` : ''}
+                </div>
+              `}
+            </div>
+          </article>
+        `;
+      }
+
+      function attachCardHandlers(container, itemsById) {
+        container.querySelectorAll('.anime-card').forEach(card => {
+          const open = () => {
+            const id = Number(card.dataset.animeId);
+            AF.openDetailModal(itemsById.get(id) || id);
+          };
+          card.addEventListener('click', (ev) => {
+            if (ev.target.closest('button, a')) return;
+            open();
+          });
+          card.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter' || ev.key === ' ') {
+              ev.preventDefault();
+              open();
+            }
+          });
+        });
+      }
+
+      // ----------------------------------------------------------------------
+      // TAB 1: RELEASES (Past-72h Simulcasts + Active ONAs + 11-Platform Catalog)
+      // ----------------------------------------------------------------------
+      function renderPlatformFilterBar() {
+        const bar = document.getElementById('platformFilterBar');
+        bar.innerHTML = `
+          <button type="button" class="pill ${activePlatform === 'all' ? 'active' : ''}" data-pf="all">All Platforms</button>
+          <button type="button" class="pill ${activePlatform === 'free' ? 'active' : ''}" data-pf="free">★ Free w/ Ads</button>
+          ${AF.PLATFORM_CONFIG.map(p => `
+            <button type="button" class="pill ${activePlatform === p.id ? 'active' : ''}" data-pf="${p.id}">
+              <span style="width:7px;height:7px;border-radius:50%;background:${p.color};display:inline-block;"></span>
+              ${AF.escapeHtml(p.name)}
+            </button>
+          `).join('')}
+        `;
+        bar.querySelectorAll('.pill').forEach(btn => {
+          btn.addEventListener('click', () => {
+            activePlatform = btn.dataset.pf;
+            renderPlatformFilterBar();
+            loadReleases();
+          });
+        });
+      }
+
+      async function loadReleases(forceRefresh = false) {
+        const grid = document.getElementById('releasesGrid');
+        const meta = document.getElementById('releasesMeta');
+        grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><span class="spinner"></span> Loading live releases &amp; multi-platform catalog...</div>`;
+
+        const nowSec = Math.floor(Date.now() / 1000);
+        const start72h = nowSec - 72 * 3600;
+
+        // Determine server-side licensedBy_in when filtering a specific platform or Free w/ Ads
+        let licensedByList = null;
+        if (activePlatform === 'free') {
+          licensedByList = AF.PLATFORM_CONFIG.filter(p => p.freeWithAds).map(p => p.licensedBy);
+        } else if (activePlatform !== 'all' && AF.PLATFORM_BY_ID[activePlatform]) {
+          licensedByList = [AF.PLATFORM_BY_ID[activePlatform].licensedBy];
+        }
+
+        const query = `
+          query ($start: Int, $end: Int ${licensedByList ? ', $licensed: [String]' : ''}) {
+            past72h: Page(page: 1, perPage: 45) {
+              airingSchedules(airingAt_greater: $start, airingAt_lesser: $end, sort: TIME_DESC) {
+                id
+                episode
+                airingAt
+                media { ${AF.MEDIA_CARD_FIELDS} }
+              }
+            }
+            activeOnas: Page(page: 1, perPage: 25) {
+              media(type: ANIME, isAdult: false, status: RELEASING, format_in: [ONA, TV, TV_SHORT], sort: [POPULARITY_DESC]) {
+                ${AF.MEDIA_CARD_FIELDS}
+              }
+            }
+            ${licensedByList ? `
+            catalog: Page(page: 1, perPage: 35) {
+              media(type: ANIME, isAdult: false, licensedBy_in: $licensed, sort: [TRENDING_DESC, POPULARITY_DESC]) {
+                ${AF.MEDIA_CARD_FIELDS}
+              }
+            }` : ''}
+          }
+        `;
+        const vars = { start: start72h, end: nowSec };
+        if (licensedByList) vars.licensed = licensedByList;
+
+        try {
+          const cacheKey = forceRefresh ? null : `releases_v1_${activePlatform}`;
+          const data = await AF.anilistQuery(query, vars, { cacheKey, ttl: AF.TTL_DYNAMIC });
+
+          const mergedMap = new Map();
+          // 1. Past-72h simulcasts
+          for (const sched of (data?.past72h?.airingSchedules || [])) {
+            const m = sched.media;
+            if (!m || m.isAdult) continue;
+            if (!mergedMap.has(m.id)) {
+              mergedMap.set(m.id, { ...m, _recentEp: sched.episode, _recentAirAt: sched.airingAt, _source: 'simulcast' });
+            }
+          }
+          // 2. Active ONAs / currently releasing batches
+          for (const m of (data?.activeOnas?.media || [])) {
+            if (!m || m.isAdult) continue;
+            if (!mergedMap.has(m.id)) {
+              mergedMap.set(m.id, { ...m, _source: m.format === 'ONA' ? 'ona' : 'airing' });
+            }
+          }
+          // 3. Server-side licensedBy_in catalog
+          for (const m of (data?.catalog?.media || [])) {
+            if (!m || m.isAdult) continue;
+            if (!mergedMap.has(m.id)) {
+              mergedMap.set(m.id, { ...m, _source: 'catalog' });
+            }
+          }
+
+          releasesCache = Array.from(mergedMap.values());
+          renderReleasesGrid();
+        } catch (err) {
+          meta.textContent = '';
+          grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">Failed to load releases: ${AF.escapeHtml(err.message)}</div>`;
+        }
+      }
+
+      function renderReleasesGrid() {
+        const grid = document.getElementById('releasesGrid');
+        const meta = document.getElementById('releasesMeta');
+        const nowSec = Math.floor(Date.now() / 1000);
+
+        const filtered = releasesCache.filter(m => {
+          const extra = tmdbExtraByAnimeId.get(m.id) || [];
+          const platforms = AF.detectPlatforms(m, extra);
+          if (activePlatform === 'free') {
+            if (!AF.isFreeWithAds(m, platforms) && m._source !== 'catalog') return false;
+          } else if (activePlatform !== 'all') {
+            if (!platforms.some(p => p.id === activePlatform) && m._source !== 'catalog') return false;
+          }
+          const dub = AF.classifyDub(m, platforms);
+          if (activeDubFilter === 'dubbed' && dub === 'Sub Only') return false;
+          if (activeDubFilter === 'sub' && dub !== 'Sub Only') return false;
+          return true;
+        });
+
+        meta.textContent = `Showing ${filtered.length} titles (${activePlatform === 'all' ? 'Past 72h Simulcasts + Active ONAs' : activePlatform === 'free' ? 'Free w/ Ads Catalog + Airing' : AF.PLATFORM_BY_ID[activePlatform]?.name + ' Catalog + Airing'})`;
+
+        if (!filtered.length) {
+          grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">No releases matched the current platform/dub filters. Try switching filters or adding custom overrides in the Detail Modal.</div>`;
+          return;
+        }
+
+        const byId = new Map(filtered.map(m => [m.id, m]));
+        grid.innerHTML = filtered.map(m => {
+          let airingBadge = '';
+          if (m._recentAirAt) {
+            const ageHrs = Math.floor((nowSec - m._recentAirAt) / 3600);
+            const isUnder24 = ageHrs < 24;
+            const rel = AF.formatRelativeCountdown(m._recentAirAt);
+            airingBadge = `<span class="badge ${isUnder24 ? 'badge-rose' : 'badge-amber'}">Ep ${m._recentEp} · ${AF.escapeHtml(rel)}</span>`;
+          } else if (m._source === 'ona') {
+            airingBadge = `<span class="badge badge-purple">Active ONA</span>`;
+          } else if (m._source === 'catalog') {
+            airingBadge = `<span class="badge badge-cyan">Catalog</span>`;
+          }
+          return renderAnimeCard(m, { airingBadge });
+        }).join('');
+        attachCardHandlers(grid, byId);
+      }
+
+      document.getElementById('dubFilterSelect').addEventListener('change', (ev) => {
+        activeDubFilter = ev.target.value;
+        renderReleasesGrid();
+      });
+
+      document.getElementById('refreshReleasesBtn').addEventListener('click', () => loadReleases(true));
+
+      document.getElementById('batchTmdbBtn').addEventListener('click', async () => {
+        const key = AF.getState().settings.tmdbKey;
+        if (!key) {
+          AF.toast('Save a TMDB API key in the "Saved & Sync" tab first.', 'warn');
+          switchTab('saved');
+          return;
+        }
+        const slice = releasesCache.slice(0, 14);
+        AF.toast(`Enriching ${slice.length} releases via TMDB US JustWatch...`, 'info');
+        let enriched = 0;
+        for (const m of slice) {
+          const prov = await AF.fetchTmdbUsProviders(AF.getDisplayTitle(m), m.seasonYear, key);
+          if (prov) {
+            const names = [...(prov.flatrate || []), ...(prov.free || []), ...(prov.ads || [])];
+            if (names.length) {
+              tmdbExtraByAnimeId.set(m.id, names);
+              enriched++;
+            }
+          }
+        }
+        renderReleasesGrid();
+        AF.toast(`TMDB US enriched ${enriched} titles.`, 'success');
+      });
+
+      // ----------------------------------------------------------------------
+      // TAB 2: 7-DAY LOCAL SCHEDULE (Mon 00:00:00 – Sun 23:59:59, 3-page batch)
+      // ----------------------------------------------------------------------
+      function getLocalWeekBounds() {
+        const now = new Date();
+        const day = now.getDay(); // 0=Sun, 1=Mon...
+        const diffToMonday = day === 0 ? -6 : 1 - day;
+        const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday, 0, 0, 0, 0);
+        const sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6, 23, 59, 59, 999);
+        return { mon, sun, startSec: Math.floor(mon.getTime() / 1000), endSec: Math.floor(sun.getTime() / 1000) };
+      }
+
+      async function loadSchedule(forceRefresh = false) {
+        const grid = document.getElementById('scheduleGrid');
+        const rangeLbl = document.getElementById('scheduleRangeLabel');
+        const { mon, sun, startSec, endSec } = getLocalWeekBounds();
+        rangeLbl.textContent = `Local week: ${mon.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} 00:00 → ${sun.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} 23:59 (up to 150 episodes batched in 1 request)`;
+        grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><span class="spinner"></span> Fetching full Mon–Sun schedule...</div>`;
+
+        const schedFields = `
+          id
+          episode
+          airingAt
+          media { ${AF.MEDIA_CARD_FIELDS} }
+        `;
+        const query = `
+          query ($start: Int, $end: Int) {
+            p1: Page(page: 1, perPage: 50) { airingSchedules(airingAt_greater: $start, airingAt_lesser: $end, sort: TIME) { ${schedFields} } }
+            p2: Page(page: 2, perPage: 50) { airingSchedules(airingAt_greater: $start, airingAt_lesser: $end, sort: TIME) { ${schedFields} } }
+            p3: Page(page: 3, perPage: 50) { airingSchedules(airingAt_greater: $start, airingAt_lesser: $end, sort: TIME) { ${schedFields} } }
+          }
+        `;
+        try {
+          const cacheKey = forceRefresh ? null : `schedule_week_${startSec}`;
+          const data = await AF.anilistQuery(query, { start: startSec, end: endSec }, { cacheKey, ttl: AF.TTL_DYNAMIC });
+          const all = [
+            ...(data?.p1?.airingSchedules || []),
+            ...(data?.p2?.airingSchedules || []),
+            ...(data?.p3?.airingSchedules || [])
+          ].filter(s => s?.media && !s.media.isAdult);
+          scheduleCache = all;
+          renderScheduleGrid();
+        } catch (err) {
+          grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">Failed to load schedule: ${AF.escapeHtml(err.message)}</div>`;
+        }
+      }
+
+      function renderScheduleGrid() {
+        const grid = document.getElementById('scheduleGrid');
+        const wlOnly = document.getElementById('scheduleWatchlistOnly').checked;
+        const wl = AF.getState().watchlist;
+        const nowSec = Math.floor(Date.now() / 1000);
+        const todayJsDay = new Date().getDay();
+        const todayBucketIdx = todayJsDay === 0 ? 6 : todayJsDay - 1;
+
+        const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        const buckets = Array.from({ length: 7 }, () => []);
+
+        for (const item of scheduleCache) {
+          if (wlOnly && !wl[item.media.id]) continue;
+          const d = new Date(item.airingAt * 1000);
+          // Explicit day-0 Sunday bucketing at index 6
+          const jsDay = d.getDay();
+          const idx = jsDay === 0 ? 6 : jsDay - 1;
+          buckets[idx].push(item);
+        }
+
+        const mediaById = new Map(scheduleCache.map(s => [s.media.id, s.media]));
+
+        grid.innerHTML = dayNames.map((name, idx) => {
+          const list = buckets[idx];
+          const isToday = idx === todayBucketIdx;
+          return `
+            <div class="schedule-col ${isToday ? 'today' : ''}">
+              <div class="schedule-col-header">
+                <strong style="font-size:13px;">${name}${isToday ? ' · Today' : ''}</strong>
+                <span class="badge ${isToday ? 'badge-accent' : 'badge-muted'}">${list.length}</span>
+              </div>
+              <div class="schedule-list">
+                ${list.length ? list.map(s => {
+                  const m = s.media;
+                  const dt = new Date(s.airingAt * 1000);
+                  const timeStr = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  const aired = s.airingAt <= nowSec;
+                  const rel = AF.formatRelativeCountdown(s.airingAt);
+                  const inWl = Boolean(wl[m.id]);
+                  return `
+                    <div class="schedule-item" data-anime-id="${m.id}" tabindex="0">
+                      <img src="${AF.escapeHtml(AF.getCover(m))}" alt="" loading="lazy">
+                      <div class="schedule-item-info">
+                        <div class="schedule-item-title">${AF.escapeHtml(AF.getDisplayTitle(m))}</div>
+                        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">Ep ${s.episode} · ${timeStr}</div>
+                        <div style="display:flex;flex-wrap:wrap;gap:4px;">
+                          <span class="badge ${aired ? 'badge-emerald' : 'badge-amber'}">${aired ? 'Aired · ' + rel : rel}</span>
+                          ${inWl ? `<span class="badge badge-accent">★ Saved</span>` : ''}
+                        </div>
+                      </div>
+                    </div>
+                  `;
+                }).join('') : `<div style="font-size:12px;color:var(--text-dim);padding:12px;text-align:center;">No episodes</div>`}
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        grid.querySelectorAll('.schedule-item').forEach(el => {
+          const open = () => AF.openDetailModal(mediaById.get(Number(el.dataset.animeId)) || Number(el.dataset.animeId));
+          el.addEventListener('click', open);
+          el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } });
+        });
+      }
+
+      document.getElementById('scheduleWatchlistOnly').addEventListener('change', renderScheduleGrid);
+      document.getElementById('refreshScheduleBtn').addEventListener('click', () => loadSchedule(true));
+
+      // ----------------------------------------------------------------------
+      // TAB 3: SAVED WATCHLIST & SYNC
+      // ----------------------------------------------------------------------
+      async function refreshCacheStatsUI() {
+        const stats = await AF.cacheStats();
+        const el = document.getElementById('cacheStatsLabel');
+        if (el) {
+          el.textContent = `IndexedDB (AnimeFinderCacheDB v2): ${stats.apiCount} cached API responses · ${stats.vectorCount} MiniLM vectors`;
+        }
+      }
+
+      function renderSavedTab() {
+        const state = AF.getState();
+        const items = Object.values(state.watchlist || {});
+        const counts = { All: items.length };
+        AF.WATCHLIST_STATUSES.forEach(st => { counts[st] = 0; });
+        items.forEach(it => {
+          const st = AF.normalizeStatus(it.status);
+          counts[st] = (counts[st] || 0) + 1;
+        });
+
+        document.getElementById('watchlistSummary').textContent =
+          `${items.length} titles saved · Watching: ${counts['Watching']} · Completed: ${counts['Completed']} · On Hold: ${counts['On Hold']} · Plan: ${counts['Plan to Watch']}`;
+
+        const pillsEl = document.getElementById('wlStatusPills');
+        pillsEl.innerHTML = ['All', ...AF.WATCHLIST_STATUSES].map(st => `
+          <button type="button" class="pill ${wlFilterStatus === st ? 'active' : ''}" data-st="${st}">
+            ${st} <span class="badge badge-muted">${counts[st] || 0}</span>
+          </button>
+        `).join('');
+        pillsEl.querySelectorAll('.pill').forEach(btn => {
+          btn.addEventListener('click', () => {
+            wlFilterStatus = btn.dataset.st;
+            renderSavedTab();
+          });
+        });
+
+        // Filter & sort
+        const sortBy = document.getElementById('wlSortSelect').value;
+        let filtered = wlFilterStatus === 'All'
+          ? items
+          : items.filter(it => AF.normalizeStatus(it.status) === wlFilterStatus);
+
+        filtered.sort((a, b) => {
+          if (sortBy === 'rating') return (b.rating || 0) - (a.rating || 0);
+          if (sortBy === 'score') return (b.averageScore || 0) - (a.averageScore || 0);
+          if (sortBy === 'title') return (a.title || '').localeCompare(b.title || '');
+          return (b.updatedAt || 0) - (a.updatedAt || 0);
+        });
+
+        const grid = document.getElementById('watchlistGrid');
+        if (!filtered.length) {
+          grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">No titles in "${AF.escapeHtml(wlFilterStatus)}". Click any anime card or import your AniList username below to populate your Watchlist.</div>`;
+        } else {
+          const byId = new Map(filtered.map(it => [it.id, it]));
+          grid.innerHTML = filtered.map(it => {
+            const epText = `${it.progress || 0}${it.episodes ? ' / ' + it.episodes : ''} eps`;
+            const extraBadge = it.rating ? `<span class="badge badge-amber">My ★ ${it.rating}/10</span>` : '';
+            const controls = `
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:auto;padding-top:6px;">
+                <span style="font-size:11.5px;color:var(--text-muted);">${epText}</span>
+                <div style="display:flex;gap:4px;">
+                  <button type="button" class="btn btn-xs btn-emerald wl-inc-btn" data-id="${it.id}">+1 Ep</button>
+                  <a class="btn btn-xs btn-cyan" href="./vibe-graph.html?seed=${it.id}">Graph</a>
+                </div>
+              </div>
+            `;
+            return renderAnimeCard(it, { extraBadge, watchlistControls: controls });
+          }).join('');
+          attachCardHandlers(grid, byId);
+          grid.querySelectorAll('.wl-inc-btn').forEach(btn => {
+            btn.addEventListener('click', (ev) => {
+              ev.stopPropagation();
+              const it = byId.get(Number(btn.dataset.id));
+              if (!it) return;
+              AF.upsertWatchlistItem(it, { progress: (it.progress || 0) + 1 });
+              AF.toast(`${it.title}: Ep ${(it.progress || 0) + 1}`, 'success', 1800);
+            });
+          });
+        }
+
+        // Populate settings inputs
+        document.getElementById('gistTokenInput').value = state.settings.gistToken || '';
+        document.getElementById('gistIdInput').value = state.settings.gistId || '';
+        document.getElementById('gistAutoSyncCheck').checked = state.settings.gistAutoSync !== false;
+        document.getElementById('tmdbKeyInput').value = state.settings.tmdbKey || '';
+        document.getElementById('anilistImportUser').value = state.settings.anilistUsername || '';
+        document.getElementById('gistLastSyncLabel').textContent = state.settings.lastGistSync
+          ? `Last Gist sync: ${new Date(state.settings.lastGistSync).toLocaleString()}`
+          : 'Not yet synced with a GitHub Gist.';
+        refreshCacheStatsUI();
+      }
+
+      document.getElementById('wlSortSelect').addEventListener('change', renderSavedTab);
+
+      document.getElementById('saveGistConfigBtn').addEventListener('click', () => {
+        AF.updateSettings({
+          gistToken: document.getElementById('gistTokenInput').value.trim(),
+          gistId: document.getElementById('gistIdInput').value.trim(),
+          gistAutoSync: document.getElementById('gistAutoSyncCheck').checked
+        });
+        AF.toast('Saved GitHub Gist configuration.', 'success');
+      });
+
+      document.getElementById('createGistBtn').addEventListener('click', async () => {
+        const token = document.getElementById('gistTokenInput').value.trim();
+        const id = await AF.gistCreateNew(token);
+        if (id) document.getElementById('gistIdInput').value = id;
+      });
+
+      document.getElementById('pullGistBtn').addEventListener('click', () => AF.gistPull());
+      document.getElementById('pushGistBtn').addEventListener('click', () => AF.gistPush());
+
+      document.getElementById('importAnilistBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('importAnilistBtn');
+        const user = document.getElementById('anilistImportUser').value.trim();
+        if (!user) return AF.toast('Enter a public AniList username.', 'warn');
+        btn.disabled = true;
+        btn.textContent = 'Importing...';
+        try {
+          const count = await AF.importAniListWatchlist(user);
+          AF.toast(`Imported ${count} anime entries from AniList user "${user}"!`, 'success');
+          renderSavedTab();
+        } catch (err) {
+          AF.toast(`AniList import failed: ${err.message}`, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Import Watchlist';
+        }
+      });
+
+      document.getElementById('saveTmdbKeyBtn').addEventListener('click', () => {
+        AF.updateSettings({ tmdbKey: document.getElementById('tmdbKeyInput').value.trim() });
+        AF.toast('Saved TMDB API key locally.', 'success');
+      });
+
+      document.getElementById('clearApiCacheBtn').addEventListener('click', async () => {
+        await AF.cacheClear(false);
+        await refreshCacheStatsUI();
+        AF.toast('Cleared API cache.', 'info');
+      });
+
+      document.getElementById('clearAllCacheBtn').addEventListener('click', async () => {
+        await AF.cacheClear(true);
+        await refreshCacheStatsUI();
+        AF.toast('Cleared API cache and MiniLM vector store.', 'warn');
+      });
+
+      document.getElementById('genSyncCodeBtn').addEventListener('click', () => {
+        document.getElementById('syncCodeOutput').value = AF.generateSyncCode();
+        AF.toast('Generated portable UTF-8 Sync Code.', 'success');
+      });
+
+      document.getElementById('copySyncUrlBtn').addEventListener('click', async () => {
+        const code = AF.generateSyncCode();
+        const url = `${window.location.origin}${window.location.pathname}#sync=${encodeURIComponent(code)}`;
+        document.getElementById('syncCodeOutput').value = url;
+        try {
+          await navigator.clipboard.writeText(url);
+          AF.toast('Copied #sync= URL to clipboard!', 'success');
+        } catch {
+          AF.toast('Share URL placed in text box (copy manually).', 'info');
+        }
+      });
+
+      document.getElementById('applySyncCodeBtn').addEventListener('click', () => {
+        const raw = document.getElementById('syncCodeInput').value.trim();
+        if (!raw) return AF.toast('Paste a Sync Code first.', 'warn');
+        try {
+          const code = raw.includes('#sync=') ? decodeURIComponent(raw.split('#sync=')[1]) : raw;
+          const merged = AF.applySyncCode(code);
+          AF.toast(`Merged ${Object.keys(merged.watchlist).length} watchlist titles!`, 'success');
+          document.getElementById('syncCodeInput').value = '';
+          renderSavedTab();
+        } catch (err) {
+          AF.toast(`Invalid Sync Code: ${err.message}`, 'error');
+        }
+      });
+
+      document.getElementById('exportJsonBtn').addEventListener('click', () => {
+        const blob = new Blob([JSON.stringify(AF.getState(), null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `animefinder-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        AF.toast('Exported JSON backup (treat as private if API keys are set).', 'warn');
+      });
+
+      document.getElementById('importJsonFile').addEventListener('change', async (ev) => {
+        const file = ev.target.files?.[0];
+        if (!file) return;
+        try {
+          const parsed = JSON.parse(await file.text());
+          const merged = AF.mergeRemotePayload(parsed);
+          AF.saveState(merged, { triggerGist: true });
+          AF.toast(`Imported backup (${Object.keys(merged.watchlist).length} titles).`, 'success');
+          renderSavedTab();
+        } catch (err) {
+          AF.toast(`JSON import failed: ${err.message}`, 'error');
+        }
+        ev.target.value = '';
+      });
+
+      // ----------------------------------------------------------------------
+      // TAB 4: RADAR (Upcoming + ANN RSS + YouTube Hunter)
+      // ----------------------------------------------------------------------
+      async function loadUpcomingRadar(forceRefresh = false) {
+        const grid = document.getElementById('upcomingGrid');
+        grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><span class="spinner"></span> Scanning upcoming anime...</div>`;
+        const query = `
+          query {
+            Page(page: 1, perPage: 20) {
+              media(type: ANIME, isAdult: false, status: NOT_YET_RELEASED, sort: [POPULARITY_DESC]) {
+                ${AF.MEDIA_CARD_FIELDS}
+                startDate { year month day }
+              }
+            }
+          }
+        `;
+        try {
+          const data = await AF.anilistQuery(query, {}, { cacheKey: forceRefresh ? null : 'radar_upcoming_v1', ttl: AF.TTL_DYNAMIC });
+          const list = data?.Page?.media || [];
+          const byId = new Map(list.map(m => [m.id, m]));
+          grid.innerHTML = list.map(m => {
+            const sd = m.startDate;
+            const dateStr = sd?.year ? [sd.year, sd.month, sd.day].filter(Boolean).join('-') : 'TBA';
+            return renderAnimeCard(m, { airingBadge: `<span class="badge badge-purple">Starts ${dateStr}</span>` });
+          }).join('');
+          attachCardHandlers(grid, byId);
+        } catch (err) {
+          grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">Upcoming fetch failed: ${AF.escapeHtml(err.message)}</div>`;
+        }
+      }
+
+      async function loadAnnNews(forceRefresh = false) {
+        const host = document.getElementById('annNewsList');
+        host.innerHTML = `<div class="empty-state"><span class="spinner"></span> Fetching ANN RSS feed...</div>`;
+        const cacheKey = 'radar_ann_rss_v1';
+        let items = forceRefresh ? null : await AF.cacheGet(cacheKey);
+
+        if (!items) {
+          const rssUrl = 'https://www.animenewsnetwork.com/all/rss.xml?ann-edition=us';
+          // Try rss2json first
+          try {
+            const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`);
+            if (res.ok) {
+              const json = await res.json();
+              if (Array.isArray(json.items) && json.items.length) {
+                items = json.items.slice(0, 15).map(i => ({ title: i.title, link: i.link, pubDate: i.pubDate }));
+              }
+            }
+          } catch {}
+
+          // Fallback: allorigins XML parse
+          if (!items) {
+            try {
+              const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`);
+              if (res.ok) {
+                const xml = new DOMParser().parseFromString(await res.text(), 'text/xml');
+                const nodes = Array.from(xml.querySelectorAll('item')).slice(0, 15);
+                if (nodes.length) {
+                  items = nodes.map(n => ({
+                    title: n.querySelector('title')?.textContent || 'News Item',
+                    link: n.querySelector('link')?.textContent || 'https://www.animenewsnetwork.com/news/',
+                    pubDate: n.querySelector('pubDate')?.textContent || ''
+                  }));
+                }
+              }
+            } catch {}
+          }
+
+          if (items?.length) await AF.cacheSet(cacheKey, items, AF.TTL_DYNAMIC);
+        }
+
+        if (!items || !items.length) {
+          host.innerHTML = `
+            <div class="empty-state">
+              Public RSS proxy is temporarily busy. Launch ANN directly:
+              <div style="margin-top:10px;">
+                <a class="btn btn-sm btn-cyan" href="https://www.animenewsnetwork.com/news/" target="_blank" rel="noopener">Anime News Network Headlines ↗</a>
+              </div>
+            </div>`;
+          return;
+        }
+
+        host.innerHTML = items.map(it => `
+          <a href="${AF.escapeHtml(it.link)}" target="_blank" rel="noopener" style="display:block;padding:10px;border-radius:10px;background:var(--bg-card);border:1px solid var(--border);text-decoration:none;">
+            <div style="font-weight:700;font-size:13px;color:var(--text);margin-bottom:3px;">${AF.escapeHtml(it.title)}</div>
+            <div style="font-size:11px;color:var(--text-dim);">${AF.escapeHtml(it.pubDate)}</div>
+          </a>
+        `).join('');
+      }
+
+      async function huntYouTube(customQuery) {
+        const input = document.getElementById('ytSearchInput');
+        const q = (customQuery ?? input.value).trim() || 'anime official trailer PV';
+        input.value = q;
+        const directUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
+        document.getElementById('ytDirectLink').href = directUrl;
+
+        const host = document.getElementById('ytResultsList');
+        host.innerHTML = `<div class="empty-state"><span class="spinner"></span> Hunting YouTube via Piped...</div>`;
+
+        const cacheKey = `radar_yt_${q.toLowerCase()}`;
+        let items = await AF.cacheGet(cacheKey);
+
+        if (!items) {
+          const instances = [
+            'https://pipedapi.kavin.rocks',
+            'https://pipedapi.adminforge.de',
+            'https://api.piped.private.coffee'
+          ];
+          for (const base of instances) {
+            try {
+              const ctrl = new AbortController();
+              const t = setTimeout(() => ctrl.abort(), 4500);
+              const res = await fetch(`${base}/search?q=${encodeURIComponent(q)}&filter=videos`, { signal: ctrl.signal });
+              clearTimeout(t);
+              if (res.ok) {
+                const json = await res.json();
+                if (Array.isArray(json.items) && json.items.length) {
+                  items = json.items.slice(0, 10).map(v => ({
+                    title: v.title,
+                    uploader: v.uploaderName || '',
+                    thumb: v.thumbnail || '',
+                    url: v.url?.startsWith('http') ? v.url : `https://www.youtube.com${v.url || ''}`,
+                    duration: v.duration ? `${Math.floor(v.duration / 60)}:${String(v.duration % 60).padStart(2, '0')}` : ''
+                  }));
+                  break;
+                }
+              }
+            } catch {}
+          }
+          if (items?.length) await AF.cacheSet(cacheKey, items, AF.TTL_DYNAMIC);
+        }
+
+        if (!items || !items.length) {
+          host.innerHTML = `
+            <div class="empty-state">
+              Public Piped instances are currently rate-limited. Open the query directly on YouTube:
+              <div style="margin-top:10px;">
+                <a class="btn btn-sm btn-primary" href="${AF.escapeHtml(directUrl)}" target="_blank" rel="noopener">Search "${AF.escapeHtml(q)}" on YouTube ↗</a>
+              </div>
+            </div>`;
+          return;
+        }
+
+        host.innerHTML = items.map(v => `
+          <a href="${AF.escapeHtml(v.url)}" target="_blank" rel="noopener" style="display:flex;gap:10px;padding:8px;border-radius:10px;background:var(--bg-card);border:1px solid var(--border);text-decoration:none;align-items:center;">
+            ${v.thumb ? `<img src="${AF.escapeHtml(v.thumb)}" alt="" style="width:96px;height:54px;object-fit:cover;border-radius:6px;flex-shrink:0;">` : ''}
+            <div style="min-width:0;flex:1;">
+              <div style="font-weight:700;font-size:12.5px;color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${AF.escapeHtml(v.title)}</div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${AF.escapeHtml(v.uploader)} ${v.duration ? '· ' + v.duration : ''}</div>
+            </div>
+          </a>
+        `).join('');
+      }
+
+      document.getElementById('refreshUpcomingBtn').addEventListener('click', () => loadUpcomingRadar(true));
+      document.getElementById('refreshAnnBtn').addEventListener('click', () => loadAnnNews(true));
+      document.getElementById('ytSearchBtn').addEventListener('click', () => huntYouTube());
+      document.getElementById('ytSearchInput').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') huntYouTube(); });
+      document.querySelectorAll('.yt-preset').forEach(btn => {
+        btn.addEventListener('click', () => huntYouTube(btn.dataset.q));
+      });
+
+      // ----------------------------------------------------------------------
+      // TAB 5: ARCHIVES (By Year 1970–2026 & By Studio up to 75 titles via isMainStudio)
+      // ----------------------------------------------------------------------
+      function initArchiveControls() {
+        const yrSel = document.getElementById('archiveYearSelect');
+        let opts = '';
+        for (let y = 2026; y >= 1970; y--) {
+          opts += `<option value="${y}" ${y === 2024 ? 'selected' : ''}>${y}</option>`;
+        }
+        yrSel.innerHTML = opts;
+
+        const decBar = document.getElementById('decadeQuickPills');
+        decBar.innerHTML = [2020, 2010, 2000, 1990, 1980, 1970].map(d =>
+          `<button type="button" class="pill decade-pill" data-year="${d === 2020 ? 2024 : d + 5}">${d}s</button>`
+        ).join('');
+        decBar.querySelectorAll('.decade-pill').forEach(btn => {
+          btn.addEventListener('click', () => {
+            yrSel.value = btn.dataset.year;
+            loadYearArchive();
+          });
+        });
+
+        const stBar = document.getElementById('curatedStudiosBar');
+        stBar.innerHTML = CURATED_STUDIOS.map(s => `<button type="button" class="pill studio-pill" data-studio="${AF.escapeHtml(s)}">${AF.escapeHtml(s)}</button>`).join('');
+        stBar.querySelectorAll('.studio-pill').forEach(btn => {
+          btn.addEventListener('click', () => {
+            document.getElementById('studioSearchInput').value = btn.dataset.studio;
+            loadStudioArchive(btn.dataset.studio);
+          });
+        });
+      }
+
+      function setArchiveMode(mode) {
+        archiveMode = mode;
+        document.getElementById('archiveModeYear').classList.toggle('active', mode === 'year');
+        document.getElementById('archiveModeStudio').classList.toggle('active', mode === 'studio');
+        document.getElementById('archiveYearControls').hidden = mode !== 'year';
+        document.getElementById('archiveStudioControls').hidden = mode !== 'studio';
+        if (mode === 'year') loadYearArchive();
+        else loadStudioArchive(document.getElementById('studioSearchInput').value.trim() || 'Kyoto Animation');
+      }
+
+      document.getElementById('archiveModeYear').addEventListener('click', () => setArchiveMode('year'));
+      document.getElementById('archiveModeStudio').addEventListener('click', () => setArchiveMode('studio'));
+      document.getElementById('loadYearArchiveBtn').addEventListener('click', loadYearArchive);
+      document.getElementById('searchStudioBtn').addEventListener('click', () => {
+        const q = document.getElementById('studioSearchInput').value.trim();
+        if (q) loadStudioArchive(q);
+      });
+      document.getElementById('studioSearchInput').addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') {
+          const q = ev.target.value.trim();
+          if (q) loadStudioArchive(q);
+        }
+      });
+
+      async function loadYearArchive() {
+        const year = Number(document.getElementById('archiveYearSelect').value) || 2024;
+        const format = document.getElementById('archiveFormatSelect').value;
+        const sort = document.getElementById('archiveSortSelect').value;
+        const grid = document.getElementById('archivesGrid');
+        const meta = document.getElementById('archivesMeta');
+        grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><span class="spinner"></span> Loading ${year} archive...</div>`;
+
+        const query = `
+          query ($year: Int, $sort: [MediaSort] ${format ? ', $format: MediaFormat' : ''}) {
+            Page(page: 1, perPage: 40) {
+              media(type: ANIME, isAdult: false, seasonYear: $year ${format ? ', format: $format' : ''}, sort: $sort) {
+                ${AF.MEDIA_CARD_FIELDS}
+              }
+            }
+          }
+        `;
+        const vars = { year, sort: [sort] };
+        if (format) vars.format = format;
+        try {
+          const data = await AF.anilistQuery(query, vars, { cacheKey: `archive_year_${year}_${format}_${sort}`, ttl: AF.TTL_DYNAMIC });
+          const list = data?.Page?.media || [];
+          meta.textContent = `Year Archive: ${year}${format ? ' · ' + format : ''} — ${list.length} titles`;
+          const byId = new Map(list.map(m => [m.id, m]));
+          grid.innerHTML = list.length
+            ? list.map(m => renderAnimeCard(m)).join('')
+            : `<div class="empty-state" style="grid-column:1/-1;">No titles found for ${year}.</div>`;
+          attachCardHandlers(grid, byId);
+        } catch (err) {
+          grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">Archive error: ${AF.escapeHtml(err.message)}</div>`;
+        }
+      }
+
+      // Uses isMainStudio on MediaEdge (per Audit Section 5) + single batched 75-title fetch + All Credited fallback
+      async function loadStudioArchive(studioName) {
+        const grid = document.getElementById('archivesGrid');
+        const meta = document.getElementById('archivesMeta');
+        grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><span class="spinner"></span> Fetching up to 75 titles for "${AF.escapeHtml(studioName)}"...</div>`;
+
+        const query = `
+          query ($search: String) {
+            Studio(search: $search) {
+              id
+              name
+              favourites
+              p1: media(page: 1, perPage: 50, sort: [SCORE_DESC, POPULARITY_DESC]) {
+                edges {
+                  isMainStudio
+                  node { ${AF.MEDIA_CARD_FIELDS} }
+                }
+              }
+              p2: media(page: 2, perPage: 25, sort: [SCORE_DESC, POPULARITY_DESC]) {
+                edges {
+                  isMainStudio
+                  node { ${AF.MEDIA_CARD_FIELDS} }
+                }
+              }
+            }
+          }
+        `;
+        try {
+          const data = await AF.anilistQuery(query, { search: studioName }, {
+            cacheKey: `archive_studio_v2_${studioName.toLowerCase()}`,
+            ttl: AF.TTL_DYNAMIC
+          });
+          const studio = data?.Studio;
+          if (!studio) {
+            meta.textContent = '';
+            grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">Studio "${AF.escapeHtml(studioName)}" not found on AniList.</div>`;
+            return;
+          }
+          const allEdges = [...(studio.p1?.edges || []), ...(studio.p2?.edges || [])]
+            .filter(e => e?.node && !e.node.isAdult);
+
+          const dedupe = (edges) => {
+            const map = new Map();
+            edges.forEach(e => { if (!map.has(e.node.id)) map.set(e.node.id, e.node); });
+            return Array.from(map.values());
+          };
+
+          let mainList = dedupe(allEdges.filter(e => e.isMainStudio));
+          let usedFallback = false;
+          if (!mainList.length) {
+            mainList = dedupe(allEdges);
+            usedFallback = true;
+          }
+
+          meta.textContent = `Studio: ${studio.name} — ${mainList.length} ${usedFallback ? 'all-credited' : 'main-studio'} titles (up to 75 fetched in 1 batched query)`;
+          const byId = new Map(mainList.map(m => [m.id, m]));
+          grid.innerHTML = mainList.length
+            ? mainList.map(m => renderAnimeCard(m)).join('')
+            : `<div class="empty-state" style="grid-column:1/-1;">No non-adult anime credits found for ${AF.escapeHtml(studio.name)}.</div>`;
+          attachCardHandlers(grid, byId);
+        } catch (err) {
+          grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">Studio query failed: ${AF.escapeHtml(err.message)}</div>`;
+        }
+      }
+
+      // ----------------------------------------------------------------------
+      // Live Cross-Tab & Modal State Sync Subscription
+      // ----------------------------------------------------------------------
+      AF.onStateChange(() => {
+        if (activeTab === 'saved') renderSavedTab();
+        else if (activeTab === 'releases' && releasesCache.length) renderReleasesGrid();
+        else if (activeTab === 'schedule' && scheduleCache.length) renderScheduleGrid();
+      });
+
+      // Boot sequence
+      renderPlatformFilterBar();
+      initArchiveControls();
+      const params = new URLSearchParams(window.location.search);
+      const initialTab = ['releases', 'schedule', 'saved', 'radar', 'archives'].includes(params.get('tab'))
+        ? params.get('tab')
+        : 'releases';
+      switchTab(initialTab);
+
+      const deepAnimeId = Number(params.get('anime'));
+      if (deepAnimeId) {
+        AF.openDetailModal(deepAnimeId);
+      }
+    })();
+  </script>
+</body>
+</html>

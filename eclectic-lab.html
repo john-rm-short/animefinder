@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AnimeFinder — Eclectic Discovery Lab</title>
+  <meta name="description" content="Experimental anime discovery tools: 2D Vibe Map, Auteur & Staff Tree, Attribute Arithmetic, and Blind Premise Roulette.">
+  <meta name="theme-color" content="#090d1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AnimeFinder">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icon.svg">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div id="af-nav-host"></div>
+
+  <main class="container">
+    <!-- Segmented Lab Tab Bar -->
+    <div class="tabs-bar" role="tablist" aria-label="Eclectic Lab Modules">
+      <button type="button" class="tab-btn active" role="tab" aria-selected="true" data-tab="vibe-map">🧭 2D Vibe Map</button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="auteur">🎬 Auteur &amp; Staff Tree</button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="arithmetic">🧮 Attribute Arithmetic</button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="roulette">🎭 Blind Premise Roulette</button>
+    </div>
+
+    <!-- MODULE 1: 2D VIBE MAP -->
+    <section id="lab-vibe-map" class="tab-panel" role="tabpanel">
+      <div class="vibe-map-layout">
+        <div class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">2D Quadrant Vibe Plane</h2>
+            <div class="pills-row">
+              <button type="button" class="pill active axis-btn" data-axis="tone-reality">Tone × Reality</button>
+              <button type="button" class="pill axis-btn" data-axis="pacing-obscurity">Pacing × Obscurity</button>
+            </div>
+          </div>
+
+          <!-- Draggable & Keyboard-Nudgeable Quadrant Plane (P1 A11y) -->
+          <div
+            id="quadrantPlane"
+            class="quadrant-plane"
+            tabindex="0"
+            role="application"
+            aria-label="2D Vibe Map Quadrant Plane. Use arrow keys to nudge coordinates, Shift plus arrows for fine adjustments, and Enter to search."
+          >
+            <div class="quadrant-axis-x"></div>
+            <div class="quadrant-axis-y"></div>
+            <span class="quadrant-label top" id="qLblTop">Surreal</span>
+            <span class="quadrant-label bottom" id="qLblBottom">Grounded</span>
+            <span class="quadrant-label left" id="qLblLeft">Dark</span>
+            <span class="quadrant-label right" id="qLblRight">Light</span>
+            <div id="quadrantReticle" class="quadrant-reticle" style="left:50%;top:50%;"></div>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px;flex-wrap:wrap;">
+            <div id="vibeCoordsReadout" aria-live="polite" style="font-family:var(--font-mono);font-size:12px;color:var(--cyan);">
+              x: 0.00 · y: 0.00
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" id="searchQuadrantBtn">Rank Top 12 Matches</button>
+          </div>
+          <div style="font-size:11.5px;color:var(--text-dim);margin-top:6px;">
+            Tip: Drag the reticle or focus the plane and nudge with <span class="kbd">←</span><span class="kbd">↑</span><span class="kbd">↓</span><span class="kbd">→</span> (<span class="kbd">Shift</span> for fine steps, <span class="kbd">Enter</span> to query).
+          </div>
+          <div id="quadrantSignals" class="pills-row" style="margin-top:10px;"></div>
+        </div>
+
+        <div>
+          <div id="vibeMapMeta" style="font-size:12.5px;color:var(--text-muted);margin-bottom:10px;">Move the reticle to rank up to 12 titles by vector alignment.</div>
+          <div id="vibeMapGrid" class="anime-grid"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MODULE 2: AUTEUR & STAFF TREE -->
+    <section id="lab-auteur" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Auteur &amp; Staff Tree</h2>
+            <div style="font-size:12px;color:var(--text-muted);">Fetches up to 100 deduplicated anime credits in a single request and sorts them into 5 craft buckets.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <input id="staffSearchInput" type="search" class="input" style="flex:1;min-width:220px;" placeholder="Search any director, composer, writer, or animator...">
+          <button type="button" class="btn btn-primary btn-sm" id="searchStaffBtn">Inspect Creator</button>
+        </div>
+        <div class="pills-row" id="curatedAuteursBar"></div>
+      </div>
+
+      <div id="auteurHeader" class="panel" hidden style="margin-bottom:16px;"></div>
+      <div id="auteurBucketsBar" class="pills-row" style="margin-bottom:14px;"></div>
+      <div id="auteurGrid" class="anime-grid"></div>
+    </section>
+
+    <!-- MODULE 3: ATTRIBUTE ARITHMETIC -->
+    <section id="lab-arithmetic" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Attribute Arithmetic (Signed Taste Equations)</h2>
+            <div style="font-size:12px;color:var(--text-muted);">
+              Combine anime, tags, and genres with <strong>+</strong> / <strong>−</strong> polarity. Click any term's sign to flip it. Excluded traits apply AniList <code>genre_not_in</code> / <code>tag_not_in</code> filters + negative scoring penalties.
+            </div>
+          </div>
+          <div class="meta-row">
+            <button type="button" class="btn btn-sm" id="resetDefaultEqBtn">Preset: Bebop + Mushishi − Action</button>
+            <button type="button" class="btn btn-primary btn-sm" id="solveEquationBtn">= Solve Equation</button>
+          </div>
+        </div>
+
+        <!-- Equation Bar -->
+        <div id="equationBar" class="equation-bar" aria-label="Active taste equation"></div>
+
+        <!-- Add Terms Controls -->
+        <div class="grid-3" style="margin-top:14px;">
+          <div style="position:relative;">
+            <label for="eqAddAnime" style="font-size:11.5px;color:var(--text-muted);display:block;margin-bottom:4px;">+ Add Anime Term</label>
+            <input id="eqAddAnime" type="search" class="input input-full" placeholder="Search anime (e.g. Serial Experiments Lain)..." autocomplete="off">
+            <div id="eqAnimeDropdown" class="search-dropdown"></div>
+          </div>
+          <div>
+            <label for="eqAddGenre" style="font-size:11.5px;color:var(--text-muted);display:block;margin-bottom:4px;">+ / − Add Genre Term</label>
+            <div style="display:flex;gap:6px;">
+              <select id="eqAddGenre" class="select" style="flex:1;"></select>
+              <button type="button" class="btn btn-emerald btn-sm" id="eqAddGenrePlus">+</button>
+              <button type="button" class="btn btn-danger btn-sm" id="eqAddGenreMinus">−</button>
+            </div>
+          </div>
+          <div>
+            <label for="eqAddTag" style="font-size:11.5px;color:var(--text-muted);display:block;margin-bottom:4px;">+ / − Add Canonical Tag</label>
+            <div style="display:flex;gap:6px;">
+              <input id="eqAddTag" list="eqTagDatalist" class="input input-full" placeholder="e.g. Cyberpunk, Iyashikei, Noir...">
+              <datalist id="eqTagDatalist"></datalist>
+              <button type="button" class="btn btn-emerald btn-sm" id="eqAddTagPlus">+</button>
+              <button type="button" class="btn btn-danger btn-sm" id="eqAddTagMinus">−</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Synthesized DNA Preview -->
+        <div id="synthesizedDna" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--text-muted);"></div>
+      </div>
+
+      <div id="arithmeticGrid" class="anime-grid"></div>
+    </section>
+
+    <!-- MODULE 4: BLIND PREMISE ROULETTE -->
+    <section id="lab-roulette" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel" style="margin-bottom:18px;">
+        <div class="panel-header" style="margin-bottom:0;">
+          <div>
+            <h2 class="panel-title">Blind Premise Roulette</h2>
+            <div style="font-size:12px;color:var(--text-muted);">Title tokens are stripped into <code>[REDACTED]</code> and artwork is hidden until reveal — discover under-seen titles purely on premise.</div>
+          </div>
+          <div class="meta-row">
+            <select id="roulettePopSelect" class="select" aria-label="Obscurity ceiling">
+              <option value="35000">Deep Cuts (&lt;35k pop)</option>
+              <option value="80000" selected>Under-Seen Gems (&lt;80k pop)</option>
+              <option value="0">Any Popularity</option>
+            </select>
+            <select id="rouletteGenreSelect" class="select" aria-label="Optional genre filter">
+              <option value="">Any Genre</option>
+            </select>
+            <button type="button" class="btn btn-primary btn-sm" id="rollRouletteBtn">🎲 Roll New Premise</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="rouletteStage"></div>
+    </section>
+  </main>
+
+  <script src="./shared-core.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      const AF = window.AnimeFinderCore;
+      AF.mountNav('lab');
+
+      let activeTab = 'vibe-map';
+      let taxonomy = null;
+      const loadedTabs = new Set();
+
+      // ----------------------------------------------------------------------
+      // Tab Switching
+      // ----------------------------------------------------------------------
+      function switchTab(tabName) {
+        activeTab = tabName;
+        document.querySelectorAll('.tabs-bar .tab-btn').forEach(btn => {
+          const isAct = btn.dataset.tab === tabName;
+          btn.classList.toggle('active', isAct);
+          btn.setAttribute('aria-selected', String(isAct));
+        });
+        document.querySelectorAll('.tab-panel').forEach(sec => {
+          sec.hidden = sec.id !== `lab-${tabName}`;
+        });
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', tabName);
+        history.replaceState(null, '', url.toString());
+
+        if (!loadedTabs.has(tabName)) {
+          loadedTabs.add(tabName);
+          if (tabName === 'vibe-map') runQuadrantQuery();
+          if (tabName === 'auteur') loadAuteur('Shinichiro Watanabe');
+          if (tabName === 'arithmetic') initArithmetic();
+          if (tabName === 'roulette') rollRoulette();
+        }
+      }
+
+      document.querySelectorAll('.tabs-bar .tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+      });
+
+      function renderLabCard(anime, badgeHtml = '') {
+        const wl = AF.getState().watchlist[anime.id];
+        const title = AF.getDisplayTitle(anime);
+        return `
+          <article class="anime-card" tabindex="0" data-id="${anime.id}">
+            <div class="anime-card-cover-wrap">
+              <img class="anime-card-cover" src="${AF.escapeHtml(AF.getCover(anime))}" alt="${AF.escapeHtml(title)}" loading="lazy">
+              <div class="anime-card-overlay-top">
+                <div>${badgeHtml} ${wl ? `<span class="badge badge-emerald">${AF.escapeHtml(wl.status)}</span>` : ''}</div>
+                ${anime.averageScore ? `<span class="badge badge-accent">★ ${anime.averageScore}%</span>` : ''}
+              </div>
+              <div class="anime-card-overlay-bottom">
+                <span class="badge badge-muted">Pop ${AF.formatCompactNumber(anime.popularity)}</span>
+                ${anime.seasonYear ? `<span class="badge badge-muted">${anime.seasonYear}</span>` : ''}
+              </div>
+            </div>
+            <div class="anime-card-body">
+              <h3 class="anime-card-title">${AF.escapeHtml(title)}</h3>
+              <div class="anime-card-meta">
+                <span>${AF.escapeHtml((anime.genres || []).slice(0, 2).join(', ') || anime.format || 'Anime')}</span>
+                <a href="./vibe-graph.html?seed=${anime.id}" onclick="event.stopPropagation();" style="font-size:11px;">Graph ↗</a>
+              </div>
+            </div>
+          </article>
+        `;
+      }
+
+      function wireCards(container, list) {
+        const byId = new Map(list.map(m => [m.id, m]));
+        container.querySelectorAll('.anime-card').forEach(card => {
+          const open = () => AF.openDetailModal(byId.get(Number(card.dataset.id)) || Number(card.dataset.id));
+          card.addEventListener('click', (ev) => { if (!ev.target.closest('a,button')) open(); });
+          card.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } });
+        });
+      }
+
+      // ----------------------------------------------------------------------
+      // MODULE 1: 2D VIBE MAP (Tone × Reality | Pacing × Obscurity)
+      // ----------------------------------------------------------------------
+      const AXIS_DEFS = {
+        'tone-reality': {
+          left: 'Dark', right: 'Light', bottom: 'Grounded', top: 'Surreal',
+          mapCoords(x, y) {
+            const tags = [];
+            const genres = [];
+            if (x <= -0.25) { tags.push('Tragedy', 'Psychological', 'Noir'); genres.push('Thriller', 'Horror'); }
+            if (x >= 0.25) { tags.push('Iyashikei', 'Coming of Age'); genres.push('Comedy', 'Slice of Life'); }
+            if (y <= -0.25) { tags.push('Seinen', 'Work', 'Historical'); genres.push('Drama', 'Sports'); }
+            if (y >= 0.25) { tags.push('Philosophy', 'Meta', 'Time Manipulation'); genres.push('Supernatural', 'Fantasy', 'Sci-Fi'); }
+            if (!tags.length && !genres.length) { tags.push('Philosophy', 'Ensemble Cast'); genres.push('Drama', 'Mystery'); }
+            return { tags, genres, maxPopularity: null, minPopularity: null };
+          }
+        },
+        'pacing-obscurity': {
+          left: 'Slow-Burn', right: 'Frenetic', bottom: 'Mainstream', top: 'Deep Cut',
+          mapCoords(x, y) {
+            const tags = [];
+            const genres = [];
+            if (x <= -0.25) { tags.push('Iyashikei', 'Philosophy', 'Episodic'); genres.push('Slice of Life', 'Drama'); }
+            if (x >= 0.25) { tags.push('Slapstick', 'Martial Arts', 'Super Power'); genres.push('Action', 'Adventure', 'Comedy'); }
+            if (!tags.length) { tags.push('Mystery', 'Coming of Age'); genres.push('Drama', 'Sci-Fi'); }
+            let maxPopularity = null;
+            let minPopularity = null;
+            if (y >= 0.35) maxPopularity = y >= 0.7 ? 25000 : 65000;
+            else if (y <= -0.35) minPopularity = y <= -0.7 ? 180000 : 85000;
+            return { tags, genres, maxPopularity, minPopularity };
+          }
+        }
+      };
+
+      let axisMode = 'tone-reality';
+      let reticleX = -0.35; // [-1, 1]
+      let reticleY = 0.45;  // [-1, 1], +1 = top, -1 = bottom
+      let quadrantDebounce = null;
+
+      function updateReticleUI() {
+        const def = AXIS_DEFS[axisMode];
+        document.getElementById('qLblLeft').textContent = def.left;
+        document.getElementById('qLblRight').textContent = def.right;
+        document.getElementById('qLblTop').textContent = def.top;
+        document.getElementById('qLblBottom').textContent = def.bottom;
+
+        const leftPct = ((reticleX + 1) / 2) * 100;
+        const topPct = ((1 - reticleY) / 2) * 100;
+        const ret = document.getElementById('quadrantReticle');
+        ret.style.left = leftPct + '%';
+        ret.style.top = topPct + '%';
+
+        document.getElementById('vibeCoordsReadout').textContent =
+          `${def.left}/${def.right}: ${reticleX.toFixed(2)}  ·  ${def.bottom}/${def.top}: ${reticleY.toFixed(2)}`;
+
+        const mapped = def.mapCoords(reticleX, reticleY);
+        document.getElementById('quadrantSignals').innerHTML = [
+          ...mapped.tags.map(t => `<span class="badge badge-accent">#${AF.escapeHtml(t)}</span>`),
+          ...mapped.genres.map(g => `<span class="badge badge-purple">${AF.escapeHtml(g)}</span>`),
+          mapped.maxPopularity ? `<span class="badge badge-amber">Pop &lt; ${AF.formatCompactNumber(mapped.maxPopularity)}</span>` : '',
+          mapped.minPopularity ? `<span class="badge badge-cyan">Pop &gt; ${AF.formatCompactNumber(mapped.minPopularity)}</span>` : ''
+        ].join('');
+      }
+
+      async function runQuadrantQuery() {
+        const def = AXIS_DEFS[axisMode];
+        const mapped = def.mapCoords(reticleX, reticleY);
+        const grid = document.getElementById('vibeMapGrid');
+        const meta = document.getElementById('vibeMapMeta');
+        grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><span class="spinner"></span> Aligning quadrant vector (${reticleX.toFixed(2)}, ${reticleY.toFixed(2)})...</div>`;
+
+        const popArgs = [
+          mapped.maxPopularity ? `popularity_lesser: ${mapped.maxPopularity}` : '',
+          mapped.minPopularity ? `popularity_greater: ${mapped.minPopularity}` : ''
+        ].filter(Boolean).join(', ');
+
+        const query = `
+          query ($tags: [String], $genres: [String]) {
+            byTag: Page(page: 1, perPage: 25) {
+              media(type: ANIME, isAdult: false, tag_in: $tags ${popArgs ? ', ' + popArgs : ''}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${AF.MEDIA_CARD_FIELDS} }
+            }
+            byGenre: Page(page: 1, perPage: 25) {
+              media(type: ANIME, isAdult: false, genre_in: $genres ${popArgs ? ', ' + popArgs : ''}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${AF.MEDIA_CARD_FIELDS} }
+            }
+          }
+        `;
+
+        try {
+          const cacheKey = `lab_quad_${axisMode}_${reticleX.toFixed(1)}_${reticleY.toFixed(1)}`;
+          const data = await AF.anilistQuery(query, { tags: mapped.tags, genres: mapped.genres }, { cacheKey, ttl: AF.TTL_DYNAMIC });
+          const allMap = new Map();
+          [...(data?.byTag?.media || []), ...(data?.byGenre?.media || [])].forEach(m => {
+            if (m && !m.isAdult && !allMap.has(m.id)) allMap.set(m.id, m);
+          });
+
+          const targetTags = new Set(mapped.tags.map(t => t.toLowerCase()));
+          const targetGenres = new Set(mapped.genres.map(g => g.toLowerCase()));
+
+          const scored = Array.from(allMap.values()).map(m => {
+            let align = 0;
+            for (const t of (m.tags || [])) {
+              if (targetTags.has(t.name.toLowerCase())) align += (t.rank || 50) * 1.1;
+            }
+            for (const g of (m.genres || [])) {
+              if (targetGenres.has(g.toLowerCase())) align += 40;
+            }
+            align += (m.averageScore || 60) * 0.35;
+            const pct = Math.min(99, Math.max(42, Math.round(align / 2.6)));
+            return { media: m, align, pct };
+          }).sort((a, b) => b.align - a.align).slice(0, 12);
+
+          meta.textContent = `Top ${scored.length} vector-aligned titles for (${reticleX.toFixed(2)}, ${reticleY.toFixed(2)})`;
+          grid.innerHTML = scored.length
+            ? scored.map(s => renderLabCard(s.media, `<span class="badge badge-cyan">${s.pct}% match</span>`)).join('')
+            : `<div class="empty-state" style="grid-column:1/-1;">No titles matched this exact coordinate. Try nudging slightly toward center.</div>`;
+          wireCards(grid, scored.map(s => s.media));
+        } catch (err) {
+          grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">Vibe Map error: ${AF.escapeHtml(err.message)}</div>`;
+        }
+      }
+
+      const plane = document.getElementById('quadrantPlane');
+      let draggingPlane = false;
+
+      function setReticleFromPointer(ev) {
+        const rect = plane.getBoundingClientRect();
+        const nx = Math.max(-1, Math.min(1, ((ev.clientX - rect.left) / rect.width) * 2 - 1));
+        const ny = Math.max(-1, Math.min(1, 1 - ((ev.clientY - rect.top) / rect.height) * 2));
+        reticleX = nx;
+        reticleY = ny;
+        updateReticleUI();
+      }
+
+      plane.addEventListener('pointerdown', (ev) => {
+        draggingPlane = true;
+        plane.setPointerCapture(ev.pointerId);
+        setReticleFromPointer(ev);
+      });
+      plane.addEventListener('pointermove', (ev) => {
+        if (!draggingPlane) return;
+        setReticleFromPointer(ev);
+      });
+      plane.addEventListener('pointerup', () => {
+        if (!draggingPlane) return;
+        draggingPlane = false;
+        runQuadrantQuery();
+      });
+
+      // P1 Accessibility: Keyboard Arrow-Key Nudging on 2D Vibe Map Reticle
+      plane.addEventListener('keydown', (ev) => {
+        const step = ev.shiftKey ? 0.05 : 0.15;
+        let changed = false;
+        if (ev.key === 'ArrowLeft') { reticleX = Math.max(-1, reticleX - step); changed = true; }
+        else if (ev.key === 'ArrowRight') { reticleX = Math.min(1, reticleX + step); changed = true; }
+        else if (ev.key === 'ArrowUp') { reticleY = Math.min(1, reticleY + step); changed = true; }
+        else if (ev.key === 'ArrowDown') { reticleY = Math.max(-1, reticleY - step); changed = true; }
+        else if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          runQuadrantQuery();
+          return;
+        }
+        if (changed) {
+          ev.preventDefault();
+          updateReticleUI();
+          if (quadrantDebounce) clearTimeout(quadrantDebounce);
+          quadrantDebounce = setTimeout(runQuadrantQuery, 450);
+        }
+      });
+
+      document.querySelectorAll('.axis-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          axisMode = btn.dataset.axis;
+          document.querySelectorAll('.axis-btn').forEach(b => b.classList.toggle('active', b === btn));
+          updateReticleUI();
+          runQuadrantQuery();
+        });
+      });
+      document.getElementById('searchQuadrantBtn').addEventListener('click', runQuadrantQuery);
+      updateReticleUI();
+
+      // ----------------------------------------------------------------------
+      // MODULE 2: AUTEUR & STAFF TREE (8 Curated Creators + 100-Credit 5 Buckets)
+      // ----------------------------------------------------------------------
+      const CURATED_AUTEURS = [
+        'Shinichiro Watanabe',
+        'Satoshi Kon',
+        'Masaaki Yuasa',
+        'Hayao Miyazaki',
+        'Hideaki Anno',
+        'Naoko Yamada',
+        'Yoko Kanno',
+        'Gen Urobuchi'
+      ];
+
+      const CRAFT_BUCKETS = [
+        'All Credits',
+        'Director',
+        'Music / Composer',
+        'Script & Series Comp',
+        'Design & Animation',
+        'Other'
+      ];
+
+      let currentAuteurCredits = [];
+      let activeBucket = 'All Credits';
+
+      function classifyCraftRole(roleStr) {
+        const r = String(roleStr || '').toLowerCase();
+        if (/(director|storyboard)/.test(r)) return 'Director';
+        if (/(music|composer|sound|theme song|arrangement|piano|orchestra)/.test(r)) return 'Music / Composer';
+        if (/(script|series composition|screenplay|original creator|story)/.test(r)) return 'Script & Series Comp';
+        if (/(character design|animation|key anim|art |color|mechanical|prop|layout)/.test(r)) return 'Design & Animation';
+        return 'Other';
+      }
+
+      document.getElementById('curatedAuteursBar').innerHTML = CURATED_AUTEURS.map(name =>
+        `<button type="button" class="pill auteur-chip" data-name="${AF.escapeHtml(name)}">${AF.escapeHtml(name)}</button>`
+      ).join('');
+      document.querySelectorAll('.auteur-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.getElementById('staffSearchInput').value = btn.dataset.name;
+          loadAuteur(btn.dataset.name);
+        });
+      });
+
+      document.getElementById('searchStaffBtn').addEventListener('click', () => {
+        const q = document.getElementById('staffSearchInput').value.trim();
+        if (q) loadAuteur(q);
+      });
+      document.getElementById('staffSearchInput').addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') {
+          const q = ev.target.value.trim();
+          if (q) loadAuteur(q);
+        }
+      });
+
+      async function loadAuteur(name) {
+        const header = document.getElementById('auteurHeader');
+        const bucketsBar = document.getElementById('auteurBucketsBar');
+        const grid = document.getElementById('auteurGrid');
+        header.hidden = true;
+        bucketsBar.innerHTML = '';
+        grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><span class="spinner"></span> Fetching up to 100 anime credits for "${AF.escapeHtml(name)}"...</div>`;
+
+        const query = `
+          query ($search: String) {
+            Staff(search: $search) {
+              id
+              name { full native }
+              image { large medium }
+              primaryOccupations
+              description(asHtml: false)
+              p1: staffMedia(page: 1, perPage: 50, type: ANIME, sort: [SCORE_DESC, POPULARITY_DESC]) {
+                edges { staffRole node { ${AF.MEDIA_CARD_FIELDS} } }
+              }
+              p2: staffMedia(page: 2, perPage: 50, type: ANIME, sort: [SCORE_DESC, POPULARITY_DESC]) {
+                edges { staffRole node { ${AF.MEDIA_CARD_FIELDS} } }
+              }
+            }
+          }
+        `;
+        try {
+          const data = await AF.anilistQuery(query, { search: name }, {
+            cacheKey: `lab_auteur_${name.toLowerCase()}`,
+            ttl: AF.TTL_STABLE
+          });
+          const staff = data?.Staff;
+          if (!staff) {
+            grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">Creator "${AF.escapeHtml(name)}" not found on AniList.</div>`;
+            return;
+          }
+
+          // Deduplicate up to 100 anime credits, merging roles per anime
+          const creditMap = new Map();
+          const allEdges = [...(staff.p1?.edges || []), ...(staff.p2?.edges || [])];
+          for (const e of allEdges) {
+            const m = e?.node;
+            if (!m || m.isAdult) continue;
+            const role = e.staffRole || 'Staff';
+            const bucket = classifyCraftRole(role);
+            if (!creditMap.has(m.id)) {
+              creditMap.set(m.id, { media: m, roles: [role], buckets: new Set([bucket]) });
+            } else {
+              const rec = creditMap.get(m.id);
+              if (!rec.roles.includes(role)) rec.roles.push(role);
+              rec.buckets.add(bucket);
+            }
+          }
+
+          currentAuteurCredits = Array.from(creditMap.values());
+          activeBucket = 'All Credits';
+
+          header.hidden = false;
+          header.innerHTML = `
+            <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+              ${staff.image?.large ? `<img src="${AF.escapeHtml(staff.image.large)}" alt="${AF.escapeHtml(staff.name.full)}" style="width:68px;height:68px;object-fit:cover;border-radius:50%;border:2px solid var(--accent);">` : ''}
+              <div style="flex:1;min-width:220px;">
+                <h3 style="margin:0;font-size:17px;">${AF.escapeHtml(staff.name.full)} <span style="font-size:12px;color:var(--text-muted);font-weight:400;">${AF.escapeHtml(staff.name.native || '')}</span></h3>
+                <div style="font-size:12px;color:var(--cyan);margin-top:2px;">${AF.escapeHtml((staff.primaryOccupations || []).join(' · '))}</div>
+                <p style="margin:6px 0 0;font-size:12.5px;color:var(--text-muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+                  ${AF.escapeHtml(AF.stripHtml(staff.description) || `${currentAuteurCredits.length} deduplicated anime credits indexed.`)}
+                </p>
+              </div>
+              <span class="badge badge-accent">${currentAuteurCredits.length} Unique Credits</span>
+            </div>
+          `;
+          renderAuteurCredits();
+        } catch (err) {
+          grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">Auteur fetch failed: ${AF.escapeHtml(err.message)}</div>`;
+        }
+      }
+
+      function renderAuteurCredits() {
+        const bucketsBar = document.getElementById('auteurBucketsBar');
+        const grid = document.getElementById('auteurGrid');
+
+        const counts = {};
+        CRAFT_BUCKETS.forEach(b => { counts[b] = 0; });
+        counts['All Credits'] = currentAuteurCredits.length;
+        currentAuteurCredits.forEach(c => {
+          c.buckets.forEach(b => { counts[b] = (counts[b] || 0) + 1; });
+        });
+
+        bucketsBar.innerHTML = CRAFT_BUCKETS.map(b => `
+          <button type="button" class="pill ${activeBucket === b ? 'active' : ''}" data-bucket="${AF.escapeHtml(b)}">
+            ${AF.escapeHtml(b)} <span class="badge badge-muted">${counts[b] || 0}</span>
+          </button>
+        `).join('');
+        bucketsBar.querySelectorAll('.pill').forEach(btn => {
+          btn.addEventListener('click', () => {
+            activeBucket = btn.dataset.bucket;
+            renderAuteurCredits();
+          });
+        });
+
+        const filtered = activeBucket === 'All Credits'
+          ? currentAuteurCredits
+          : currentAuteurCredits.filter(c => c.buckets.has(activeBucket));
+
+        grid.innerHTML = filtered.length
+          ? filtered.map(c => renderLabCard(c.media, `<span class="badge badge-purple">${AF.escapeHtml(c.roles[0])}</span>`)).join('')
+          : `<div class="empty-state" style="grid-column:1/-1;">No credits in the "${AF.escapeHtml(activeBucket)}" craft bucket.</div>`;
+        wireCards(grid, filtered.map(c => c.media));
+      }
+
+      // ----------------------------------------------------------------------
+      // MODULE 3: ATTRIBUTE ARITHMETIC (Signed Equations + Exclusion Filters)
+      // ----------------------------------------------------------------------
+      let eqTerms = []; // { type: 'anime'|'genre'|'tag', label, sign: +1|-1, anime?: obj }
+      let arithmeticInitialized = false;
+
+      async function ensureTaxonomyLoaded() {
+        if (taxonomy) return taxonomy;
+        taxonomy = await AF.getTaxonomy();
+        const gSel = document.getElementById('eqAddGenre');
+        const rSel = document.getElementById('rouletteGenreSelect');
+        gSel.innerHTML = taxonomy.genres.map(g => `<option value="${AF.escapeHtml(g)}">${AF.escapeHtml(g)}</option>`).join('');
+        rSel.innerHTML = `<option value="">Any Genre</option>` + taxonomy.genres.map(g => `<option value="${AF.escapeHtml(g)}">${AF.escapeHtml(g)}</option>`).join('');
+
+        const dl = document.getElementById('eqTagDatalist');
+        dl.innerHTML = taxonomy.tags.map(t => `<option value="${AF.escapeHtml(t.name)}"></option>`).join('');
+        return taxonomy;
+      }
+
+      function renderEquationBar() {
+        const bar = document.getElementById('equationBar');
+        if (!eqTerms.length) {
+          bar.innerHTML = `<span style="color:var(--text-dim);font-size:13px;">Add anime, genres, or tags below to build a taste equation...</span>`;
+          return;
+        }
+        bar.innerHTML = eqTerms.map((t, idx) => `
+          <div class="eq-term ${t.sign > 0 ? 'plus' : 'minus'}">
+            <button type="button" class="eq-sign-btn" data-idx="${idx}" title="Click to flip + / − polarity">${t.sign > 0 ? '+' : '−'}</button>
+            <span>${AF.escapeHtml(t.label)}</span>
+            <span style="font-size:10px;opacity:0.75;text-transform:uppercase;">${t.type}</span>
+            <button type="button" class="eq-remove-btn" data-idx="${idx}" aria-label="Remove ${AF.escapeHtml(t.label)}">✕</button>
+          </div>
+        `).join('');
+
+        bar.querySelectorAll('.eq-sign-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const idx = Number(btn.dataset.idx);
+            eqTerms[idx].sign *= -1;
+            renderEquationBar();
+            solveEquation();
+          });
+        });
+        bar.querySelectorAll('.eq-remove-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            eqTerms.splice(Number(btn.dataset.idx), 1);
+            renderEquationBar();
+            solveEquation();
+          });
+        });
+      }
+
+      function synthesizeDna() {
+        const posTags = new Map();
+        const negTags = new Set();
+        const posGenres = new Map();
+        const negGenres = new Set();
+        const seedIds = new Set();
+
+        for (const term of eqTerms) {
+          if (term.type === 'anime' && term.anime) {
+            seedIds.add(term.anime.id);
+            const a = term.anime;
+            for (const g of (a.genres || [])) {
+              if (term.sign > 0) posGenres.set(g, (posGenres.get(g) || 0) + 1);
+              else negGenres.add(g);
+            }
+            for (const t of (a.tags || []).filter(x => !x.isMediaSpoiler && (x.rank || 0) >= 55).slice(0, 8)) {
+              if (term.sign > 0) posTags.set(t.name, (posTags.get(t.name) || 0) + (t.rank || 50));
+              else negTags.add(t.name);
+            }
+          } else if (term.type === 'genre') {
+            if (term.sign > 0) posGenres.set(term.label, (posGenres.get(term.label) || 0) + 2);
+            else negGenres.add(term.label);
+          } else if (term.type === 'tag') {
+            if (term.sign > 0) posTags.set(term.label, (posTags.get(term.label) || 0) + 120);
+            else negTags.add(term.label);
+          }
+        }
+
+        // Remove any explicitly negated items from positives
+        negGenres.forEach(g => posGenres.delete(g));
+        negTags.forEach(t => posTags.delete(t));
+
+        const topPosTags = Array.from(posTags.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k]) => k);
+        const topPosGenres = Array.from(posGenres.entries()).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k]) => k);
+
+        return {
+          posTags: topPosTags,
+          posGenres: topPosGenres,
+          negTags: Array.from(negTags).slice(0, 6),
+          negGenres: Array.from(negGenres).slice(0, 6),
+          seedIds
+        };
+      }
+
+      async function solveEquation() {
+        const dnaBox = document.getElementById('synthesizedDna');
+        const grid = document.getElementById('arithmeticGrid');
+        if (!eqTerms.length) {
+          dnaBox.innerHTML = '';
+          grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">Add at least one positive term to solve.</div>`;
+          return;
+        }
+
+        const dna = synthesizeDna();
+        dnaBox.innerHTML = `
+          <div class="meta-row">
+            <strong style="color:var(--text);">Synthesized DNA:</strong>
+            ${dna.posGenres.map(g => `<span class="badge badge-emerald">+ ${AF.escapeHtml(g)}</span>`).join('')}
+            ${dna.posTags.map(t => `<span class="badge badge-cyan">+ #${AF.escapeHtml(t)}</span>`).join('')}
+            ${dna.negGenres.map(g => `<span class="badge badge-rose">− ${AF.escapeHtml(g)}</span>`).join('')}
+            ${dna.negTags.map(t => `<span class="badge badge-rose">− #${AF.escapeHtml(t)}</span>`).join('')}
+          </div>
+        `;
+
+        grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><span class="spinner"></span> Solving signed attribute equation on AniList...</div>`;
+
+        const vars = {};
+        const varDefs = [];
+        const exclArgs = [];
+        if (dna.negGenres.length) { vars.negGenres = dna.negGenres; varDefs.push('$negGenres: [String]'); exclArgs.push('genre_not_in: $negGenres'); }
+        if (dna.negTags.length) { vars.negTags = dna.negTags; varDefs.push('$negTags: [String]'); exclArgs.push('tag_not_in: $negTags'); }
+
+        const parts = [];
+        const exclStr = exclArgs.length ? ', ' + exclArgs.join(', ') : '';
+        if (dna.posTags.length) {
+          vars.posTags = dna.posTags;
+          varDefs.push('$posTags: [String]');
+          parts.push(`t: Page(page: 1, perPage: 30) { media(type: ANIME, isAdult: false, tag_in: $posTags${exclStr}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${AF.MEDIA_CARD_FIELDS} } }`);
+        }
+        if (dna.posGenres.length) {
+          vars.posGenres = dna.posGenres;
+          varDefs.push('$posGenres: [String]');
+          parts.push(`g: Page(page: 1, perPage: 30) { media(type: ANIME, isAdult: false, genre_in: $posGenres${exclStr}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${AF.MEDIA_CARD_FIELDS} } }`);
+        }
+        if (!parts.length) {
+          parts.push(`base: Page(page: 1, perPage: 30) { media(type: ANIME, isAdult: false${exclStr}, sort: [SCORE_DESC]) { ${AF.MEDIA_CARD_FIELDS} } }`);
+        }
+
+        const header = varDefs.length ? `query (${varDefs.join(', ')})` : 'query';
+        try {
+          const data = await AF.anilistQuery(`${header} { ${parts.join('\n')} }`, vars);
+          const pool = new Map();
+          for (const bucket of Object.values(data || {})) {
+            for (const m of (bucket?.media || [])) {
+              if (m && !m.isAdult && !dna.seedIds.has(m.id) && !pool.has(m.id)) {
+                pool.set(m.id, m);
+              }
+            }
+          }
+
+          const posT = new Set(dna.posTags.map(x => x.toLowerCase()));
+          const posG = new Set(dna.posGenres.map(x => x.toLowerCase()));
+          const negT = new Set(dna.negTags.map(x => x.toLowerCase()));
+          const negG = new Set(dna.negGenres.map(x => x.toLowerCase()));
+
+          const ranked = Array.from(pool.values()).map(m => {
+            let score = 0;
+            for (const t of (m.tags || [])) {
+              const tl = t.name.toLowerCase();
+              if (posT.has(tl)) score += (t.rank || 50) * 1.25;
+              if (negT.has(tl)) score -= (t.rank || 50) * 1.8; // Negative penalty
+            }
+            for (const g of (m.genres || [])) {
+              const gl = g.toLowerCase();
+              if (posG.has(gl)) score += 45;
+              if (negG.has(gl)) score -= 90;
+            }
+            score += (m.averageScore || 65) * 0.4;
+            return { media: m, score };
+          }).sort((a, b) => b.score - a.score).slice(0, 18);
+
+          grid.innerHTML = ranked.length
+            ? ranked.map((r, i) => renderLabCard(r.media, `<span class="badge badge-emerald">#${i + 1} Fit</span>`)).join('')
+            : `<div class="empty-state" style="grid-column:1/-1;">No results satisfied all exclusion constraints. Try flipping or removing a negative term.</div>`;
+          wireCards(grid, ranked.map(r => r.media));
+        } catch (err) {
+          grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">Equation solver error: ${AF.escapeHtml(err.message)}</div>`;
+        }
+      }
+
+      async function loadDefaultPresetEquation() {
+        const [bebop, mushishi] = await Promise.all([
+          AF.fetchAnimeById(1),   // Cowboy Bebop
+          AF.fetchAnimeById(457)  // Mushishi
+        ]);
+        eqTerms = [];
+        if (bebop) eqTerms.push({ type: 'anime', label: AF.getDisplayTitle(bebop), sign: 1, anime: bebop });
+        if (mushishi) eqTerms.push({ type: 'anime', label: AF.getDisplayTitle(mushishi), sign: 1, anime: mushishi });
+        eqTerms.push({ type: 'genre', label: 'Action', sign: -1 });
+        renderEquationBar();
+        solveEquation();
+      }
+
+      async function initArithmetic(seedIdOverride = null) {
+        await ensureTaxonomyLoaded();
+        if (arithmeticInitialized && !seedIdOverride) return;
+        arithmeticInitialized = true;
+
+        const params = new URLSearchParams(window.location.search);
+        const seedId = seedIdOverride || Number(params.get('seed'));
+        if (seedId) {
+          const seeded = await AF.fetchAnimeById(seedId);
+          if (seeded) {
+            eqTerms = [{ type: 'anime', label: AF.getDisplayTitle(seeded), sign: 1, anime: seeded }];
+            renderEquationBar();
+            solveEquation();
+            return;
+          }
+        }
+        await loadDefaultPresetEquation();
+      }
+
+      // Wire Arithmetic inputs
+      const eqAnimeInp = document.getElementById('eqAddAnime');
+      const eqAnimeDrop = document.getElementById('eqAnimeDropdown');
+      let eqSearchTimer = null;
+      eqAnimeInp.addEventListener('input', () => {
+        const q = eqAnimeInp.value.trim();
+        if (eqSearchTimer) clearTimeout(eqSearchTimer);
+        if (q.length < 2) { eqAnimeDrop.classList.remove('open'); return; }
+        eqSearchTimer = setTimeout(async () => {
+          const hits = await AF.searchAnimeQuick(q, 6);
+          if (!hits.length) { eqAnimeDrop.classList.remove('open'); return; }
+          eqAnimeDrop.innerHTML = hits.map(m => `
+            <div class="search-item" data-id="${m.id}">
+              <img src="${AF.escapeHtml(AF.getCover(m))}" alt="">
+              <div>
+                <div style="font-weight:700;font-size:13px;">${AF.escapeHtml(AF.getDisplayTitle(m))}</div>
+                <div style="font-size:11px;color:var(--text-muted);">${m.seasonYear || ''} · ${(m.genres || []).slice(0, 2).join(', ')}</div>
+              </div>
+            </div>
+          `).join('');
+          eqAnimeDrop.classList.add('open');
+          eqAnimeDrop.querySelectorAll('.search-item').forEach((row, idx) => {
+            row.addEventListener('click', () => {
+              const m = hits[idx];
+              eqTerms.push({ type: 'anime', label: AF.getDisplayTitle(m), sign: 1, anime: m });
+              eqAnimeInp.value = '';
+              eqAnimeDrop.classList.remove('open');
+              renderEquationBar();
+              solveEquation();
+            });
+          });
+        }, 300);
+      });
+
+      document.getElementById('eqAddGenrePlus').addEventListener('click', () => {
+        const g = document.getElementById('eqAddGenre').value;
+        if (g) { eqTerms.push({ type: 'genre', label: g, sign: 1 }); renderEquationBar(); solveEquation(); }
+      });
+      document.getElementById('eqAddGenreMinus').addEventListener('click', () => {
+        const g = document.getElementById('eqAddGenre').value;
+        if (g) { eqTerms.push({ type: 'genre', label: g, sign: -1 }); renderEquationBar(); solveEquation(); }
+      });
+      document.getElementById('eqAddTagPlus').addEventListener('click', () => {
+        const t = document.getElementById('eqAddTag').value.trim();
+        if (t) { eqTerms.push({ type: 'tag', label: t, sign: 1 }); document.getElementById('eqAddTag').value = ''; renderEquationBar(); solveEquation(); }
+      });
+      document.getElementById('eqAddTagMinus').addEventListener('click', () => {
+        const t = document.getElementById('eqAddTag').value.trim();
+        if (t) { eqTerms.push({ type: 'tag', label: t, sign: -1 }); document.getElementById('eqAddTag').value = ''; renderEquationBar(); solveEquation(); }
+      });
+      document.getElementById('resetDefaultEqBtn').addEventListener('click', loadDefaultPresetEquation);
+      document.getElementById('solveEquationBtn').addEventListener('click', solveEquation);
+      document.addEventListener('click', (ev) => {
+        if (!ev.target.closest('#eqAddAnime') && !ev.target.closest('#eqAnimeDropdown')) {
+          eqAnimeDrop.classList.remove('open');
+        }
+      });
+
+      // ----------------------------------------------------------------------
+      // MODULE 4: BLIND PREMISE ROULETTE (Redacted Tokens + Blind Watchlist Save)
+      // ----------------------------------------------------------------------
+      let roulettePool = [];
+      let currentRoulette = null;
+      let rouletteRevealed = false;
+
+      function redactSynopsis(anime) {
+        let text = AF.stripHtml(anime.description || '');
+        if (!text) return 'No synopsis available.';
+        const titles = [anime.title?.english, anime.title?.romaji, anime.title?.native].filter(Boolean);
+        const tokens = new Set();
+        const ignore = new Set(['the','and','for','with','from','into','that','this','season','movie','part','ova','ona']);
+
+        for (const t of titles) {
+          if (t.length >= 3) tokens.add(t);
+          t.split(/[^a-zA-Z0-9\u3040-\u30ff\u4e00-\u9faf]+/).forEach(w => {
+            if (w.length >= 4 && !ignore.has(w.toLowerCase())) tokens.add(w);
+          });
+        }
+
+        const sorted = Array.from(tokens).sort((a, b) => b.length - a.length);
+        let safe = AF.escapeHtml(text);
+        for (const tok of sorted) {
+          const esc = AF.escapeHtml(tok).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const re = new RegExp(`\\b${esc}\\b`, 'gi');
+          safe = safe.replace(re, '<span class="redacted-token">[REDACTED]</span>');
+        }
+        return safe;
+      }
+
+      async function rollRoulette(refetch = false) {
+        await ensureTaxonomyLoaded();
+        const stage = document.getElementById('rouletteStage');
+        const popMax = Number(document.getElementById('roulettePopSelect').value) || 0;
+        const genre = document.getElementById('rouletteGenreSelect').value;
+
+        if (refetch || !roulettePool.length) {
+          stage.innerHTML = `<div class="empty-state"><span class="spinner"></span> Drawing blind premise candidates...</div>`;
+          const page = Math.floor(Math.random() * 4) + 1;
+          const query = `
+            query ($page: Int ${genre ? ', $genre: String' : ''}) {
+              Page(page: $page, perPage: 30) {
+                media(type: ANIME, isAdult: false, averageScore_greater: 70 ${popMax ? `, popularity_lesser: ${popMax}` : ''} ${genre ? ', genre: $genre' : ''}, sort: [SCORE_DESC]) {
+                  ${AF.MEDIA_CARD_FIELDS}
+                }
+              }
+            }
+          `;
+          try {
+            const vars = { page };
+            if (genre) vars.genre = genre;
+            const data = await AF.anilistQuery(query, vars);
+            roulettePool = (data?.Page?.media || []).filter(m => m && m.description && m.description.length > 90);
+          } catch (err) {
+            stage.innerHTML = `<div class="empty-state">Roulette query failed: ${AF.escapeHtml(err.message)}</div>`;
+            return;
+          }
+        }
+
+        if (!roulettePool.length) {
+          stage.innerHTML = `<div class="empty-state">No premises matched those filters. Try widening popularity or genre.</div>`;
+          return;
+        }
+        const idx = Math.floor(Math.random() * roulettePool.length);
+        currentRoulette = roulettePool.splice(idx, 1)[0];
+        rouletteRevealed = false;
+        renderRouletteCard();
+      }
+
+      function renderRouletteCard() {
+        const stage = document.getElementById('rouletteStage');
+        const m = currentRoulette;
+        if (!m) return;
+        const wl = AF.getState().watchlist[m.id];
+
+        if (!rouletteRevealed) {
+          stage.innerHTML = `
+            <div class="roulette-card">
+              <div class="meta-row" style="justify-content:space-between;margin-bottom:14px;">
+                <span class="badge badge-amber">MYSTERY PREMISE · ARTWORK &amp; TITLE HIDDEN</span>
+                <div class="meta-row">
+                  ${(m.genres || []).slice(0, 3).map(g => `<span class="badge badge-purple">${AF.escapeHtml(g)}</span>`).join('')}
+                  ${m.format ? `<span class="badge badge-muted">${AF.escapeHtml(m.format)}</span>` : ''}
+                  ${m.episodes ? `<span class="badge badge-muted">${m.episodes} eps</span>` : ''}
+                </div>
+              </div>
+              <p style="font-size:15px;line-height:1.7;color:#e2e8f0;margin:0 0 20px;white-space:pre-line;">
+                ${redactSynopsis(m)}
+              </p>
+              <div class="meta-row">
+                <button type="button" class="btn btn-emerald" id="blindSaveBtn">${wl ? '✓ Saved Blindly (' + AF.escapeHtml(wl.status) + ')' : '★ Blind Save to Watchlist'}</button>
+                <button type="button" class="btn btn-primary" id="revealRouletteBtn">👁 Reveal Title &amp; Artwork</button>
+                <button type="button" class="btn" id="skipRouletteBtn" style="margin-left:auto;">🎲 Next Premise</button>
+              </div>
+            </div>
+          `;
+        } else {
+          const title = AF.getDisplayTitle(m);
+          stage.innerHTML = `
+            <div class="roulette-card">
+              <div class="detail-hero">
+                <img class="detail-cover" src="${AF.escapeHtml(AF.getCover(m))}" alt="${AF.escapeHtml(title)}">
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                  <div class="meta-row">
+                    <span class="badge badge-emerald">REVEALED</span>
+                    ${m.averageScore ? `<span class="badge badge-accent">★ ${m.averageScore}%</span>` : ''}
+                    <span class="badge badge-muted">Pop ${AF.formatCompactNumber(m.popularity)}</span>
+                    ${m.seasonYear ? `<span class="badge badge-muted">${m.seasonYear}</span>` : ''}
+                  </div>
+                  <h3 style="margin:0;font-size:20px;">${AF.escapeHtml(title)}</h3>
+                  <div style="font-size:12.5px;color:var(--text-muted);">
+                    ${AF.escapeHtml((m.studios?.nodes || []).map(s => s.name).join(', ') || 'Unknown Studio')} · ${AF.escapeHtml((m.genres || []).join(', '))}
+                  </div>
+                  <p style="margin:0;font-size:13.5px;color:#cbd5e1;white-space:pre-line;max-height:190px;overflow-y:auto;">
+                    ${AF.escapeHtml(AF.stripHtml(m.description))}
+                  </p>
+                  <div class="meta-row" style="margin-top:auto;">
+                    <button type="button" class="btn btn-emerald btn-sm" id="blindSaveBtn">${wl ? '✓ In Watchlist (' + AF.escapeHtml(wl.status) + ')' : '+ Save to Watchlist'}</button>
+                    <button type="button" class="btn btn-sm" id="rouletteDetailsBtn">Full Details</button>
+                    <a class="btn btn-cyan btn-sm" href="./vibe-graph.html?seed=${m.id}">Taste Graph ↗</a>
+                    <button type="button" class="btn btn-primary btn-sm" id="skipRouletteBtn" style="margin-left:auto;">🎲 Roll Another</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+          stage.querySelector('#rouletteDetailsBtn').addEventListener('click', () => AF.openDetailModal(m));
+        }
+
+        stage.querySelector('#blindSaveBtn').addEventListener('click', () => {
+          AF.upsertWatchlistItem(m, {
+            status: 'Plan to Watch',
+            notes: wl?.notes || '[Discovered via Blind Premise Roulette]'
+          });
+          AF.toast(rouletteRevealed ? `Saved "${AF.getDisplayTitle(m)}" to Watchlist!` : 'Saved mystery title blindly to Plan to Watch!', 'success');
+          renderRouletteCard();
+        });
+
+        const revBtn = stage.querySelector('#revealRouletteBtn');
+        if (revBtn) {
+          revBtn.addEventListener('click', () => {
+            rouletteRevealed = true;
+            renderRouletteCard();
+          });
+        }
+        stage.querySelector('#skipRouletteBtn').addEventListener('click', () => rollRoulette(false));
+      }
+
+      document.getElementById('rollRouletteBtn').addEventListener('click', () => rollRoulette(true));
+      document.getElementById('roulettePopSelect').addEventListener('change', () => rollRoulette(true));
+      document.getElementById('rouletteGenreSelect').addEventListener('change', () => rollRoulette(true));
+
+      AF.onStateChange(() => {
+        if (activeTab === 'roulette' && currentRoulette) renderRouletteCard();
+      });
+
+      // Boot deep-link routing (?tab=vibe-map|auteur|arithmetic|roulette & ?seed=<id>)
+      const params = new URLSearchParams(window.location.search);
+      const initialTab = ['vibe-map', 'auteur', 'arithmetic', 'roulette'].includes(params.get('tab'))
+        ? params.get('tab')
+        : 'vibe-map';
+      switchTab(initialTab);
+    })();
+  </script>
+</body>
+</html>

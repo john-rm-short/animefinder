@@ -1,0 +1,1345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AnimeFinder — Vibe &amp; Taste Graph</title>
+  <meta name="description" content="Seedless live-taxonomy Vibe Search, Force & Pure-JS t-SNE Taste Graph, 5-slider DNA weights, and optional in-browser MiniLM neural embeddings.">
+  <meta name="theme-color" content="#090d1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AnimeFinder">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icon.svg">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div id="af-nav-host"></div>
+
+  <div class="graph-workspace">
+    <!-- LEFT: Toolbar + Interactive High-DPI Canvas + Accessible Node Table -->
+    <div class="graph-main">
+      <div class="graph-toolbar">
+        <!-- Row 1: Find Vibe + Seed Autocomplete + Watchlist Constellation -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <div style="display:flex;gap:6px;flex:1.4;min-width:240px;">
+            <input id="vibePromptInput" type="search" class="input input-full" placeholder="Describe a vibe (e.g. '90s cyberpunk noir', 'cozy slow-burn rural', 'parody')..." aria-label="Find Vibe prompt">
+            <button type="button" class="btn btn-primary btn-sm" id="runVibeBtn">Find Vibe</button>
+          </div>
+          <div style="position:relative;flex:1;min-width:200px;">
+            <input id="seedSearchInput" type="search" class="input input-full" placeholder="Or seed by anime title..." autocomplete="off" aria-label="Seed graph by anime">
+            <div id="seedDropdown" class="search-dropdown" role="listbox"></div>
+          </div>
+          <button type="button" class="btn btn-emerald btn-sm" id="seedWatchlistBtn">★ Watchlist Constellation</button>
+        </div>
+
+        <!-- Row 2: Preset Vibe Chips + Parsed Taxonomy Readout -->
+        <div class="pills-row" id="vibePresetsBar">
+          <span style="font-size:11px;color:var(--text-dim);font-weight:700;">VIBES:</span>
+          <button type="button" class="pill vibe-chip" data-vibe="90s cyberpunk noir">90s Cyberpunk Noir</button>
+          <button type="button" class="pill vibe-chip" data-vibe="cozy slow-burn iyashikei">Cozy Slow-Burn</button>
+          <button type="button" class="pill vibe-chip" data-vibe="surreal mind-bending psychological">Surreal Mind-Bending</button>
+          <button type="button" class="pill vibe-chip" data-vibe="atmospheric folklore supernatural">Atmospheric Folklore</button>
+          <button type="button" class="pill vibe-chip" data-vibe="melancholic bittersweet sci-fi">Bittersweet Sci-Fi</button>
+          <button type="button" class="pill vibe-chip" data-vibe="parody slapstick chaotic">Chaotic Parody</button>
+          <button type="button" class="pill vibe-chip" data-vibe="bleak dystopian philosophical">Bleak Philosophical</button>
+        </div>
+
+        <!-- Row 3: Layout, Gem Ceiling, MiniLM Neural Mode, DNA Weights toggle, Table View -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
+          <div class="pills-row">
+            <button type="button" class="pill active" id="layoutForceBtn">Force Layout</button>
+            <button type="button" class="pill" id="layoutTsneBtn">Pure-JS t-SNE</button>
+            <span style="color:var(--border-strong);">|</span>
+            <span style="font-size:11px;color:var(--text-dim);font-weight:700;">GEM CEILING:</span>
+            <button type="button" class="pill active gem-btn" data-gem="0">All</button>
+            <button type="button" class="pill gem-btn" data-gem="80000">&lt;80k</button>
+            <button type="button" class="pill gem-btn" data-gem="35000">&lt;35k</button>
+          </div>
+          <div class="meta-row">
+            <button type="button" class="btn btn-xs btn-cyan" id="toggleNeuralBtn" title="Lazy-load in-browser Xenova/all-MiniLM-L6-v2 (q8) WASM embeddings">🧠 MiniLM Neural: OFF</button>
+            <button type="button" class="btn btn-xs" id="toggleWeightsBtn" aria-expanded="false">⚙ DNA Weights</button>
+            <button type="button" class="btn btn-xs" id="toggleTableBtn" aria-pressed="false">☰ Table View (A11y)</button>
+          </div>
+        </div>
+
+        <!-- Collapsible 5-Slider DNA Weights -->
+        <div id="dnaWeightsPanel" hidden style="padding-top:6px;border-top:1px solid var(--border);">
+          <div class="sliders-grid">
+            <label class="slider-item">
+              <span>TF-IDF Rare Tags: <strong id="wTagVal">40%</strong></span>
+              <input type="range" id="wTag" min="0" max="100" value="40">
+            </label>
+            <label class="slider-item">
+              <span>Shared Staff / Composers: <strong id="wStaffVal">18%</strong></span>
+              <input type="range" id="wStaff" min="0" max="100" value="18">
+            </label>
+            <label class="slider-item">
+              <span>Lead Studio Match: <strong id="wStudioVal">12%</strong></span>
+              <input type="range" id="wStudio" min="0" max="100" value="12">
+            </label>
+            <label class="slider-item">
+              <span>Genre Jaccard: <strong id="wGenreVal">12%</strong></span>
+              <input type="range" id="wGenre" min="0" max="100" value="12">
+            </label>
+            <label class="slider-item">
+              <span>Semantic Text / MiniLM: <strong id="wSemVal">18%</strong></span>
+              <input type="range" id="wSem" min="0" max="100" value="18">
+            </label>
+          </div>
+        </div>
+
+        <div id="vibeParsedReadout" style="font-size:11.5px;color:var(--text-muted);display:flex;flex-wrap:wrap;gap:6px;align-items:center;"></div>
+      </div>
+
+      <!-- High-DPI Canvas Area -->
+      <div class="graph-canvas-wrap">
+        <canvas id="graphCanvas" aria-label="Interactive Anime Taste Graph Canvas"></canvas>
+
+        <div class="graph-legend" aria-hidden="true">
+          <span><i class="legend-dot" style="background:#818cf8;"></i>Seed</span>
+          <span><i class="legend-dot" style="background:#34d399;"></i>Watchlist</span>
+          <span><i class="legend-dot" style="background:#fbbf24;"></i>Hidden Gem (&lt;35k)</span>
+          <span><i class="legend-dot" style="background:#38bdf8;"></i>Selected</span>
+        </div>
+
+        <div class="graph-hud">
+          <button type="button" class="btn btn-xs" id="fitViewBtn">⌖ Fit View</button>
+          <button type="button" class="btn btn-xs" id="unpinAllBtn">Unpin All</button>
+          <span class="badge badge-muted" id="graphCountBadge">0 nodes</span>
+          <span class="badge badge-purple" id="neuralStatusBadge" hidden></span>
+        </div>
+
+        <!-- P1 Accessible Tabular Node List Fallback -->
+        <div id="nodeTableWrap" class="node-table-wrap" role="region" aria-label="Accessible Graph Nodes Table">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <h3 style="margin:0;font-size:15px;">Accessible Node List (Keyboard &amp; Screen-Reader View)</h3>
+            <span style="font-size:12px;color:var(--text-muted);">Select any row to inspect &amp; edit in the Node Inspector</span>
+          </div>
+          <table class="af-table">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Cluster</th>
+                <th>Score</th>
+                <th>Popularity</th>
+                <th>Status</th>
+                <th>Similarity</th>
+              </tr>
+            </thead>
+            <tbody id="nodeTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Persistent Node Inspector with Inline Watchlist Editor -->
+    <aside class="graph-inspector" aria-label="Node Inspector">
+      <div id="inspectorContent">
+        <div class="empty-state" style="margin-top:20px;">
+          <div style="font-size:28px;margin-bottom:8px;">🌌</div>
+          <strong>Taste Graph Ready</strong>
+          <p style="font-size:12.5px;margin:8px 0 0;">Click any node on the canvas (or in Table View) to inspect similarity signals, edit your Watchlist inline, attach a Wikipedia profile, or expand neighbors.</p>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script src="./shared-core.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      const AF = window.AnimeFinderCore;
+      AF.mountNav('graph');
+
+      // ----------------------------------------------------------------------
+      // Graph State
+      // ----------------------------------------------------------------------
+      const canvas = document.getElementById('graphCanvas');
+      const ctx = canvas.getContext('2d');
+
+      let nodes = []; // { id, anime, x, y, vx, vy, pinned, isSeed, cluster, img, wikiText, embedding, tokens }
+      let edges = []; // { a, b, weight, breakdown }
+      let clusters = []; // { label, color, cx, cy, r, members }
+      let selectedId = null;
+      let hoveredId = null;
+      let layoutMode = 'force'; // 'force' | 'tsne'
+      let gemCeiling = 0; // 0 | 80000 | 35000
+      let neuralEnabled = false;
+      let neuralExtractor = null;
+      let neuralLoading = false;
+
+      // Camera transform
+      let cam = { x: 0, y: 0, zoom: 1 };
+      let dragState = null; // { mode: 'pan'|'node', node, startX, startY, camX, camY, moved }
+      let animHandle = null;
+      let simAlpha = 1;
+
+      const CLUSTER_COLORS = ['#818cf8', '#38bdf8', '#c084fc', '#34d399', '#fbbf24', '#fb7185', '#2dd4bf'];
+
+      // ----------------------------------------------------------------------
+      // DNA Weights
+      // ----------------------------------------------------------------------
+      function getWeights() {
+        const w = {
+          tag: Number(document.getElementById('wTag').value),
+          staff: Number(document.getElementById('wStaff').value),
+          studio: Number(document.getElementById('wStudio').value),
+          genre: Number(document.getElementById('wGenre').value),
+          sem: Number(document.getElementById('wSem').value)
+        };
+        const sum = (w.tag + w.staff + w.studio + w.genre + w.sem) || 1;
+        return {
+          tag: w.tag / sum,
+          staff: w.staff / sum,
+          studio: w.studio / sum,
+          genre: w.genre / sum,
+          sem: w.sem / sum
+        };
+      }
+
+      ['wTag', 'wStaff', 'wStudio', 'wGenre', 'wSem'].forEach(id => {
+        const inp = document.getElementById(id);
+        const valEl = document.getElementById(id + 'Val');
+        inp.addEventListener('input', () => {
+          valEl.textContent = inp.value + '%';
+          recomputeGraphSimilarity();
+        });
+      });
+
+      document.getElementById('toggleWeightsBtn').addEventListener('click', (ev) => {
+        const panel = document.getElementById('dnaWeightsPanel');
+        panel.hidden = !panel.hidden;
+        ev.currentTarget.setAttribute('aria-expanded', String(!panel.hidden));
+      });
+
+      // ----------------------------------------------------------------------
+      // Tokenization, TF-IDF Rare Tag Cosine, Semantic & Optional MiniLM WASM
+      // ----------------------------------------------------------------------
+      const STOP_WORDS = new Set([
+        'the','and','for','that','with','from','this','into','their','they','have','has','had','was','were','are','not','but','who','his','her','she','him','its','about','after','when','where','while','will','can','only','more','one','two','new','life','world','story','anime','series','young','girl','boy','high','school','day','time','years'
+      ]);
+
+      function tokenizeText(text) {
+        const words = String(text || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/);
+        const set = new Set();
+        for (const w of words) {
+          if (w.length >= 4 && !STOP_WORDS.has(w)) set.add(w);
+        }
+        return set;
+      }
+
+      function buildNodeText(node) {
+        const a = node.anime;
+        const syn = AF.stripHtml(a.description || '').slice(0, 600);
+        const genres = (a.genres || []).join(', ');
+        const tags = (a.tags || []).slice(0, 10).map(t => t.name).join(', ');
+        const wiki = node.wikiText ? ' ' + node.wikiText.slice(0, 500) : '';
+        return `${AF.getDisplayTitle(a)}. Genres: ${genres}. Tags: ${tags}. ${syn}${wiki}`;
+      }
+
+      function cosineVectors(v1, v2) {
+        if (!v1 || !v2 || v1.length !== v2.length) return 0;
+        let dot = 0, n1 = 0, n2 = 0;
+        for (let i = 0; i < v1.length; i++) {
+          dot += v1[i] * v2[i];
+          n1 += v1[i] * v1[i];
+          n2 += v2[i] * v2[i];
+        }
+        return (n1 && n2) ? Math.max(0, dot / (Math.sqrt(n1) * Math.sqrt(n2))) : 0;
+      }
+
+      async function enableMiniLM() {
+        const badge = document.getElementById('neuralStatusBadge');
+        const btn = document.getElementById('toggleNeuralBtn');
+        if (neuralLoading) return;
+
+        if (!neuralExtractor) {
+          neuralLoading = true;
+          badge.hidden = false;
+          badge.textContent = 'Loading Xenova/all-MiniLM-L6-v2 (q8 WASM)...';
+          btn.disabled = true;
+          try {
+            const mod = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+            mod.env.allowLocalModels = false;
+            neuralExtractor = await mod.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { quantized: true });
+            AF.toast('MiniLM WASM model loaded! Computing 384-d embeddings...', 'success');
+          } catch (err) {
+            neuralLoading = false;
+            neuralEnabled = false;
+            btn.disabled = false;
+            btn.textContent = '🧠 MiniLM Neural: OFF';
+            badge.hidden = true;
+            AF.toast(`MiniLM load failed (falling back to lexical semantics): ${err.message}`, 'warn');
+            return;
+          }
+          neuralLoading = false;
+          btn.disabled = false;
+        }
+
+        await embedVisibleNodes();
+      }
+
+      async function embedVisibleNodes() {
+        if (!neuralEnabled || !neuralExtractor || !nodes.length) return;
+        const badge = document.getElementById('neuralStatusBadge');
+        badge.hidden = false;
+        let done = 0;
+        for (const n of nodes) {
+          const text = buildNodeText(n);
+          const hash = String(text.length) + ':' + text.slice(0, 32);
+          if (!n.embedding || n._embedHash !== hash) {
+            const cached = await AF.vectorGet(n.id);
+            if (cached && cached.textHash === hash && cached.vector?.length) {
+              n.embedding = cached.vector;
+              n._embedHash = hash;
+            } else {
+              badge.textContent = `Embedding ${++done}/${nodes.length} (384-d)...`;
+              const out = await neuralExtractor(text, { pooling: 'mean', normalize: true });
+              n.embedding = Array.from(out.data);
+              n._embedHash = hash;
+              await AF.vectorSet(n.id, n.embedding, hash);
+            }
+          }
+        }
+        badge.textContent = `MiniLM 384-d active (${nodes.length} vectors cached)`;
+        recomputeGraphSimilarity();
+      }
+
+      document.getElementById('toggleNeuralBtn').addEventListener('click', async () => {
+        neuralEnabled = !neuralEnabled;
+        const btn = document.getElementById('toggleNeuralBtn');
+        const badge = document.getElementById('neuralStatusBadge');
+        btn.textContent = neuralEnabled ? '🧠 MiniLM Neural: ON' : '🧠 MiniLM Neural: OFF';
+        btn.classList.toggle('btn-primary', neuralEnabled);
+        if (neuralEnabled) {
+          await enableMiniLM();
+        } else {
+          badge.hidden = true;
+          recomputeGraphSimilarity();
+        }
+      });
+
+      // ----------------------------------------------------------------------
+      // Pairwise Similarity Matrix, Clusters & Pure-JS Deterministic t-SNE
+      // ----------------------------------------------------------------------
+      function getVisibleNodes() {
+        if (!gemCeiling) return nodes;
+        return nodes.filter(n => n.isSeed || (n.anime.popularity || 0) <= gemCeiling);
+      }
+
+      function recomputeGraphSimilarity() {
+        const vis = getVisibleNodes();
+        const N = vis.length;
+        if (!N) {
+          edges = [];
+          clusters = [];
+          renderNodeTable();
+          return;
+        }
+
+        const weights = getWeights();
+
+        // Compute TF-IDF document frequency for tags across graph
+        const tagDF = new Map();
+        for (const n of vis) {
+          const seen = new Set();
+          for (const t of (n.anime.tags || [])) {
+            if (t.isMediaSpoiler) continue;
+            if (!seen.has(t.name)) {
+              seen.add(t.name);
+              tagDF.set(t.name, (tagDF.get(t.name) || 0) + 1);
+            }
+          }
+          n.tokens = tokenizeText(buildNodeText(n));
+        }
+
+        // Precompute tag TF-IDF vectors, staff sets, studio sets, genre sets
+        const meta = vis.map(n => {
+          const tagVec = new Map();
+          let tagNorm = 0;
+          for (const t of (n.anime.tags || [])) {
+            if (t.isMediaSpoiler) continue;
+            const idf = Math.log((N + 1) / ((tagDF.get(t.name) || 1) + 0.5)) + 0.5;
+            const val = ((t.rank || 50) / 100) * idf;
+            tagVec.set(t.name, val);
+            tagNorm += val * val;
+          }
+          const staffIds = new Set((n.anime.staff?.edges || []).map(e => e.node?.id).filter(Boolean));
+          const studioIds = new Set((n.anime.studios?.nodes || []).map(s => s.id));
+          const genres = new Set(n.anime.genres || []);
+          return { tagVec, tagNorm: Math.sqrt(tagNorm) || 1, staffIds, studioIds, genres };
+        });
+
+        const simMatrix = Array.from({ length: N }, () => new Float64Array(N));
+        const allEdges = [];
+
+        for (let i = 0; i < N; i++) {
+          simMatrix[i][i] = 1;
+          for (let j = i + 1; j < N; j++) {
+            const A = meta[i], B = meta[j];
+            // 1. TF-IDF Rare Tag Cosine
+            let dot = 0;
+            for (const [k, v] of A.tagVec) {
+              if (B.tagVec.has(k)) dot += v * B.tagVec.get(k);
+            }
+            const sTag = dot / (A.tagNorm * B.tagNorm);
+
+            // 2. Shared Staff & Composers
+            let sharedStaff = 0;
+            for (const sid of A.staffIds) if (B.staffIds.has(sid)) sharedStaff++;
+            const sStaff = sharedStaff ? Math.min(1, sharedStaff / 2.5) : 0;
+
+            // 3. Lead Studio Match
+            let sStudio = 0;
+            for (const stid of A.studioIds) if (B.studioIds.has(stid)) { sStudio = 1; break; }
+
+            // 4. Genre Jaccard
+            let gInter = 0;
+            for (const g of A.genres) if (B.genres.has(g)) gInter++;
+            const gUnion = A.genres.size + B.genres.size - gInter;
+            const sGenre = gUnion ? gInter / gUnion : 0;
+
+            // 5. Semantic Text (384-d MiniLM cosine if enabled, else token Jaccard)
+            let sSem = 0;
+            if (neuralEnabled && vis[i].embedding && vis[j].embedding) {
+              sSem = cosineVectors(vis[i].embedding, vis[j].embedding);
+            } else {
+              let tInter = 0;
+              for (const tok of vis[i].tokens) if (vis[j].tokens.has(tok)) tInter++;
+              const tUnion = vis[i].tokens.size + vis[j].tokens.size - tInter;
+              sSem = tUnion ? Math.min(1, (tInter / tUnion) * 4.5) : 0;
+            }
+
+            const total =
+              weights.tag * sTag +
+              weights.staff * sStaff +
+              weights.studio * sStudio +
+              weights.genre * sGenre +
+              weights.sem * sSem;
+
+            simMatrix[i][j] = total;
+            simMatrix[j][i] = total;
+            allEdges.push({
+              a: vis[i],
+              b: vis[j],
+              weight: total,
+              breakdown: { sTag, sStaff, sStudio, sGenre, sSem }
+            });
+          }
+        }
+
+        // Keep top edges per node for crisp readability
+        const edgeMap = new Map();
+        for (let i = 0; i < N; i++) {
+          const incident = allEdges
+            .filter(e => e.a === vis[i] || e.b === vis[i])
+            .sort((x, y) => y.weight - x.weight)
+            .slice(0, 4);
+          for (const e of incident) {
+            if (e.weight < 0.08) continue;
+            const key = e.a.id < e.b.id ? `${e.a.id}_${e.b.id}` : `${e.b.id}_${e.a.id}`;
+            if (!edgeMap.has(key)) edgeMap.set(key, e);
+          }
+        }
+        edges = Array.from(edgeMap.values());
+
+        // Emergent Mini-Genre Clustering (dominant high-IDF tag / genre)
+        const clusterBuckets = new Map();
+        for (const n of vis) {
+          const topTag = (n.anime.tags || [])
+            .filter(t => !t.isMediaSpoiler && t.rank >= 60)
+            .sort((a, b) => {
+              const dfA = tagDF.get(a.name) || 1;
+              const dfB = tagDF.get(b.name) || 1;
+              const prefA = (dfA >= 2 && dfA <= Math.max(3, N * 0.5)) ? 1.5 : 0.7;
+              const prefB = (dfB >= 2 && dfB <= Math.max(3, N * 0.5)) ? 1.5 : 0.7;
+              return (b.rank * prefB) - (a.rank * prefA);
+            })[0];
+          const label = topTag?.name || n.anime.genres?.[0] || 'Core';
+          n.cluster = label;
+          if (!clusterBuckets.has(label)) clusterBuckets.set(label, []);
+          clusterBuckets.get(label).push(n);
+        }
+
+        clusters = Array.from(clusterBuckets.entries())
+          .filter(([, members]) => members.length >= 2)
+          .sort((a, b) => b[1].length - a[1].length)
+          .slice(0, 7)
+          .map(([label, members], idx) => ({
+            label,
+            members,
+            color: CLUSTER_COLORS[idx % CLUSTER_COLORS.length],
+            cx: 0, cy: 0, r: 80
+          }));
+
+        if (layoutMode === 'tsne') {
+          runPureJsTsne(vis, simMatrix);
+          fitToView();
+        } else {
+          simAlpha = 0.85;
+        }
+
+        document.getElementById('graphCountBadge').textContent = `${vis.length} nodes · ${edges.length} edges`;
+        renderNodeTable();
+        if (selectedId) renderInspector(selectedId);
+      }
+
+      // Deterministic Pure-JS 2D t-SNE directly from similarity matrix
+      function runPureJsTsne(vis, simMatrix) {
+        const N = vis.length;
+        if (N <= 1) return;
+
+        // Deterministic PRNG (Mulberry32)
+        let seed = 421337;
+        const rand = () => {
+          seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+          let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+          t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+          return ((t ^ t >>> 14) >>> 0) / 4294967296;
+        };
+
+        // Pairwise affinities P from similarity matrix
+        const P = Array.from({ length: N }, () => new Float64Array(N));
+        let sumP = 0;
+        for (let i = 0; i < N; i++) {
+          for (let j = 0; j < N; j++) {
+            if (i === j) continue;
+            const d = Math.max(0.01, 1 - simMatrix[i][j]);
+            const p = Math.exp(-d * d * 4.5);
+            P[i][j] = p;
+            sumP += p;
+          }
+        }
+        for (let i = 0; i < N; i++) {
+          for (let j = 0; j < N; j++) {
+            P[i][j] = Math.max(1e-9, (P[i][j] + P[j][i]) / (2 * (sumP || 1)));
+          }
+        }
+
+        // Initialize 2D coordinates deterministically
+        const Y = vis.map((_, idx) => [
+          Math.cos((idx / N) * Math.PI * 2) * 10 + (rand() - 0.5) * 2,
+          Math.sin((idx / N) * Math.PI * 2) * 10 + (rand() - 0.5) * 2
+        ]);
+        const vel = vis.map(() => [0, 0]);
+
+        const iters = 140;
+        const lr = 45;
+        for (let iter = 0; iter < iters; iter++) {
+          const Q = Array.from({ length: N }, () => new Float64Array(N));
+          let sumQ = 0;
+          for (let i = 0; i < N; i++) {
+            for (let j = i + 1; j < N; j++) {
+              const dx = Y[i][0] - Y[j][0];
+              const dy = Y[i][1] - Y[j][1];
+              const q = 1 / (1 + dx * dx + dy * dy);
+              Q[i][j] = q;
+              Q[j][i] = q;
+              sumQ += 2 * q;
+            }
+          }
+          const exag = iter < 40 ? 2.5 : 1.0;
+          const mom = iter < 50 ? 0.5 : 0.8;
+          for (let i = 0; i < N; i++) {
+            let gx = 0, gy = 0;
+            for (let j = 0; j < N; j++) {
+              if (i === j) continue;
+              const qij = Math.max(1e-9, Q[i][j] / (sumQ || 1));
+              const mult = 4 * (exag * P[i][j] - qij) * Q[i][j];
+              gx += mult * (Y[i][0] - Y[j][0]);
+              gy += mult * (Y[i][1] - Y[j][1]);
+            }
+            vel[i][0] = mom * vel[i][0] - lr * gx;
+            vel[i][1] = mom * vel[i][1] - lr * gy;
+            Y[i][0] += vel[i][0];
+            Y[i][1] += vel[i][1];
+          }
+        }
+
+        // Normalize into canvas space (~ [-340, 340])
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const [x, y] of Y) {
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+        const span = Math.max(maxX - minX, maxY - minY, 0.001);
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
+        for (let i = 0; i < N; i++) {
+          if (!vis[i].pinned) {
+            vis[i].x = ((Y[i][0] - cx) / span) * 660;
+            vis[i].y = ((Y[i][1] - cy) / span) * 460;
+            vis[i].vx = 0;
+            vis[i].vy = 0;
+          }
+        }
+      }
+
+      // ----------------------------------------------------------------------
+      // Graph Population (Find Vibe, Seed Anime, Watchlist Constellation, Expand)
+      // ----------------------------------------------------------------------
+      function addAnimeNodes(animeList, { reset = true, seedIds = new Set() } = {}) {
+        if (reset) {
+          nodes = [];
+          selectedId = null;
+        }
+        const existing = new Map(nodes.map(n => [n.id, n]));
+        const totalNew = animeList.length;
+
+        animeList.forEach((a, idx) => {
+          if (!a || !a.id) return;
+          if (existing.has(a.id)) {
+            if (seedIds.has(a.id)) existing.get(a.id).isSeed = true;
+            return;
+          }
+          const angle = (idx / Math.max(1, totalNew)) * Math.PI * 2;
+          const radius = seedIds.has(a.id) ? 30 : 140 + (idx % 4) * 55;
+          const img = new Image();
+          img.referrerPolicy = 'no-referrer';
+          img.src = AF.getCover(a);
+          const node = {
+            id: a.id,
+            anime: a,
+            x: Math.cos(angle) * radius,
+            y: Math.sin(angle) * radius,
+            vx: 0,
+            vy: 0,
+            pinned: false,
+            isSeed: seedIds.has(a.id),
+            cluster: a.genres?.[0] || 'Core',
+            img,
+            wikiText: '',
+            embedding: null,
+            tokens: new Set()
+          };
+          nodes.push(node);
+          existing.set(a.id, node);
+        });
+
+        if (!selectedId && nodes.length) {
+          selectedId = (nodes.find(n => n.isSeed) || nodes[0]).id;
+        }
+        recomputeGraphSimilarity();
+        if (neuralEnabled && neuralExtractor) embedVisibleNodes();
+        fitToView();
+        renderInspector(selectedId);
+      }
+
+      async function runVibeSearch(promptText) {
+        const q = String(promptText || '').trim();
+        if (!q) return;
+        document.getElementById('vibePromptInput').value = q;
+        const readout = document.getElementById('vibeParsedReadout');
+        readout.innerHTML = `<span class="spinner"></span> Resolving live AniList taxonomy for "${AF.escapeHtml(q)}"...`;
+
+        try {
+          const taxonomy = await AF.getTaxonomy();
+          const parsed = AF.parseVibePrompt(q, taxonomy);
+          const candidates = await AF.fetchVibeCandidates(parsed, {
+            limit: 26,
+            maxPopularity: gemCeiling || null
+          });
+
+          readout.innerHTML = `
+            <span class="badge badge-cyan">${parsed.layersUsed.join(' + ') || 'Direct Search'}</span>
+            ${parsed.tags.map(t => `<span class="badge badge-accent">#${AF.escapeHtml(t)}</span>`).join('')}
+            ${parsed.genres.map(g => `<span class="badge badge-purple">${AF.escapeHtml(g)}</span>`).join('')}
+            ${parsed.decadeRange ? `<span class="badge badge-amber">${parsed.decadeRange.label}</span>` : ''}
+            <span>(${candidates.length} titles mapped)</span>
+          `;
+
+          const seedSet = new Set(candidates.slice(0, 2).map(c => c.id));
+          addAnimeNodes(candidates, { reset: true, seedIds: seedSet });
+        } catch (err) {
+          readout.innerHTML = `<span style="color:var(--rose);">Vibe search failed: ${AF.escapeHtml(err.message)}</span>`;
+        }
+      }
+
+      async function seedByAnimeId(animeId) {
+        const readout = document.getElementById('vibeParsedReadout');
+        readout.innerHTML = `<span class="spinner"></span> Fetching seed anime &amp; semantic neighborhood...`;
+        try {
+          const query = `
+            query ($id: Int) {
+              Media(id: $id, type: ANIME) {
+                ${AF.MEDIA_CARD_FIELDS}
+                recommendations(perPage: 16, sort: RATING_DESC) {
+                  nodes { mediaRecommendation { ${AF.MEDIA_CARD_FIELDS} } }
+                }
+              }
+            }
+          `;
+          const data = await AF.anilistQuery(query, { id: Number(animeId) }, { cacheKey: `graph_seed_${animeId}`, ttl: AF.TTL_DYNAMIC });
+          const seed = data?.Media;
+          if (!seed) throw new Error('Anime not found');
+
+          const recs = (seed.recommendations?.nodes || [])
+            .map(n => n.mediaRecommendation)
+            .filter(m => m && !m.isAdult);
+
+          // Also fetch top tag neighbors if fewer than 16 recs
+          let extra = [];
+          if (recs.length < 14 && seed.tags?.length) {
+            const topTags = seed.tags.filter(t => !t.isMediaSpoiler).slice(0, 3).map(t => t.name);
+            extra = await AF.fetchVibeCandidates({ raw: AF.getDisplayTitle(seed), tags: topTags, genres: (seed.genres || []).slice(0, 2) }, { limit: 16 });
+          }
+
+          const combined = [seed, ...recs, ...extra];
+          const dedup = Array.from(new Map(combined.map(m => [m.id, m])).values()).slice(0, 26);
+
+          readout.innerHTML = `<span class="badge badge-accent">Seeded by: ${AF.escapeHtml(AF.getDisplayTitle(seed))}</span> <span>${dedup.length} connected titles</span>`;
+          addAnimeNodes(dedup, { reset: true, seedIds: new Set([seed.id]) });
+        } catch (err) {
+          readout.innerHTML = `<span style="color:var(--rose);">Seed failed: ${AF.escapeHtml(err.message)}</span>`;
+        }
+      }
+
+      async function seedByWatchlist() {
+        const wlItems = Object.values(AF.getState().watchlist || {});
+        if (!wlItems.length) {
+          AF.toast('Your Watchlist is empty! Add titles in Main Hub or import from AniList first.', 'warn');
+          return;
+        }
+        const readout = document.getElementById('vibeParsedReadout');
+        readout.innerHTML = `<span class="spinner"></span> Mapping your Watchlist constellation (${Math.min(wlItems.length, 24)} titles)...`;
+
+        const ids = wlItems
+          .sort((a, b) => (b.rating || 0) - (a.rating || 0) || (b.updatedAt || 0) - (a.updatedAt || 0))
+          .slice(0, 24)
+          .map(i => i.id);
+
+        const query = `
+          query ($ids: [Int]) {
+            Page(page: 1, perPage: 30) {
+              media(id_in: $ids, type: ANIME, isAdult: false) { ${AF.MEDIA_CARD_FIELDS} }
+            }
+          }
+        `;
+        try {
+          const data = await AF.anilistQuery(query, { ids }, { cacheKey: `graph_wl_${ids.join(',')}`, ttl: AF.TTL_DYNAMIC });
+          const list = data?.Page?.media || [];
+          readout.innerHTML = `<span class="badge badge-emerald">Watchlist Constellation</span> <span>${list.length} saved titles mapped — click any node and hit "Expand Neighbors" to discover new gems!</span>`;
+          addAnimeNodes(list, { reset: true, seedIds: new Set(ids.slice(0, 5)) });
+        } catch (err) {
+          readout.innerHTML = `<span style="color:var(--rose);">Watchlist map failed: ${AF.escapeHtml(err.message)}</span>`;
+        }
+      }
+
+      async function expandNodeNeighbors(node) {
+        if (!node) return;
+        AF.toast(`Expanding neighbors for "${AF.getDisplayTitle(node.anime)}"...`, 'info', 2200);
+        const query = `
+          query ($id: Int) {
+            Media(id: $id, type: ANIME) {
+              recommendations(perPage: 10, sort: RATING_DESC) {
+                nodes { mediaRecommendation { ${AF.MEDIA_CARD_FIELDS} } }
+              }
+            }
+          }
+        `;
+        try {
+          const data = await AF.anilistQuery(query, { id: node.id }, { cacheKey: `graph_expand_${node.id}`, ttl: AF.TTL_DYNAMIC });
+          const recs = (data?.Media?.recommendations?.nodes || [])
+            .map(r => r.mediaRecommendation)
+            .filter(m => m && !m.isAdult);
+          if (!recs.length) return AF.toast('No additional AniList recommendations found.', 'warn');
+          const before = nodes.length;
+          addAnimeNodes(recs, { reset: false });
+          const added = nodes.length - before;
+          AF.toast(added ? `Added ${added} neighbor nodes to the graph!` : 'All top neighbors are already in the graph.', 'success');
+        } catch (err) {
+          AF.toast(`Expand failed: ${err.message}`, 'error');
+        }
+      }
+
+      // ----------------------------------------------------------------------
+      // Persistent Right-Hand Node Inspector (with Inline Watchlist Editor)
+      // ----------------------------------------------------------------------
+      function renderInspector(nodeId) {
+        const host = document.getElementById('inspectorContent');
+        const node = nodes.find(n => n.id === nodeId);
+        if (!node) return;
+        const a = node.anime;
+        const title = AF.getDisplayTitle(a);
+        const wl = AF.getState().watchlist[a.id];
+        const studios = (a.studios?.nodes || []).map(s => s.name).join(', ') || 'Unknown';
+
+        // Top connected neighbors in current graph
+        const neighbors = edges
+          .filter(e => e.a.id === node.id || e.b.id === node.id)
+          .map(e => ({ other: e.a.id === node.id ? e.b : e.a, weight: e.weight, breakdown: e.breakdown }))
+          .sort((x, y) => y.weight - x.weight)
+          .slice(0, 5);
+
+        host.innerHTML = `
+          <div style="display:flex;gap:12px;align-items:flex-start;">
+            <img src="${AF.escapeHtml(AF.getCover(a))}" alt="${AF.escapeHtml(title)}" style="width:82px;height:114px;object-fit:cover;border-radius:10px;border:1px solid var(--border-strong);flex-shrink:0;">
+            <div style="min-width:0;flex:1;">
+              <h2 style="margin:0 0 6px;font-size:15.5px;line-height:1.25;">${AF.escapeHtml(title)}</h2>
+              <div class="meta-row" style="gap:5px;">
+                ${a.averageScore ? `<span class="badge badge-emerald">★ ${a.averageScore}%</span>` : ''}
+                <span class="badge badge-muted">Pop ${AF.formatCompactNumber(a.popularity)}</span>
+                <span class="badge badge-purple">${AF.escapeHtml(node.cluster)}</span>
+                ${(a.popularity || 0) < 35000 ? `<span class="badge badge-amber">Hidden Gem</span>` : ''}
+              </div>
+              <div style="font-size:11.5px;color:var(--text-muted);margin-top:6px;">
+                ${AF.escapeHtml(studios)} · ${a.seasonYear || '—'} · ${a.format || ''}
+              </div>
+            </div>
+          </div>
+
+          <div class="meta-row">
+            <button type="button" class="btn btn-primary btn-xs" id="insExpandBtn">+ Expand Neighbors</button>
+            <button type="button" class="btn btn-cyan btn-xs" id="insWikiBtn">📖 Attach Wikipedia</button>
+            <button type="button" class="btn btn-xs" id="insPinBtn">${node.pinned ? '📌 Unpin' : '📌 Pin Node'}</button>
+            <a class="btn btn-xs" href="./eclectic-lab.html?tab=arithmetic&seed=${a.id}">± Arithmetic</a>
+            <button type="button" class="btn btn-xs" id="insFullModalBtn">Full Details</button>
+          </div>
+
+          <p style="margin:0;font-size:12.5px;color:#cbd5e1;max-height:110px;overflow-y:auto;">
+            ${AF.escapeHtml(AF.stripHtml(a.description) || 'No synopsis available.')}
+          </p>
+
+          ${node.wikiText ? `
+            <div class="detail-section" style="padding:10px;">
+              <h4 style="margin-bottom:4px;">Wikipedia Semantic Profile Attached</h4>
+              <div style="font-size:11.5px;color:#cbd5e1;max-height:85px;overflow-y:auto;">${AF.escapeHtml(node.wikiText)}</div>
+            </div>
+          ` : ''}
+
+          <!-- Inline Watchlist Editor (Harmonized On Hold) -->
+          <div class="detail-section" style="padding:12px;">
+            <h4>Inline Watchlist Editor</h4>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+              <div class="form-field">
+                <label for="insWlStatus">Status</label>
+                <select id="insWlStatus" class="select">
+                  ${AF.WATCHLIST_STATUSES.map(st => `<option value="${st}" ${(wl?.status || 'Plan to Watch') === st ? 'selected' : ''}>${st}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-field">
+                <label for="insWlRating">Rating</label>
+                <select id="insWlRating" class="select">
+                  <option value="0">Unrated</option>
+                  ${[10,9,8,7,6,5,4,3,2,1].map(r => `<option value="${r}" ${Number(wl?.rating) === r ? 'selected' : ''}>${r}/10</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+              <label for="insWlProg" style="font-size:11.5px;color:var(--text-muted);">Eps:</label>
+              <input id="insWlProg" type="number" min="0" max="${a.episodes || 9999}" class="input" style="width:76px;padding:5px 8px;" value="${wl?.progress || 0}">
+              <span style="font-size:11.5px;color:var(--text-dim);">/ ${a.episodes || '?'}</span>
+            </div>
+            <textarea id="insWlNotes" class="textarea" style="min-height:54px;margin-bottom:8px;" placeholder="Notes...">${AF.escapeHtml(wl?.notes || '')}</textarea>
+            <div class="meta-row">
+              <button type="button" class="btn btn-emerald btn-xs" id="insWlSaveBtn">${wl ? 'Save Changes' : '+ Add to Watchlist'}</button>
+              ${wl ? `<button type="button" class="btn btn-danger btn-xs" id="insWlRemoveBtn">Remove</button>` : ''}
+            </div>
+          </div>
+
+          <!-- Top DNA Tags & Closest Neighbors -->
+          <div class="detail-section" style="padding:12px;">
+            <h4>Strongest Graph Connections</h4>
+            ${neighbors.length ? neighbors.map(nb => `
+              <button type="button" class="ins-nb-row" data-id="${nb.other.id}" style="width:100%;text-align:left;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;margin-bottom:4px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);">
+                <span style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${AF.escapeHtml(AF.getDisplayTitle(nb.other.anime))}</span>
+                <span class="badge badge-cyan">${Math.round(nb.weight * 100)}%</span>
+              </button>
+            `).join('') : '<div style="font-size:12px;color:var(--text-dim);">No strong edges under current weights.</div>'}
+          </div>
+        `;
+
+        host.querySelector('#insExpandBtn').addEventListener('click', () => expandNodeNeighbors(node));
+        host.querySelector('#insPinBtn').addEventListener('click', () => {
+          node.pinned = !node.pinned;
+          renderInspector(node.id);
+        });
+        host.querySelector('#insFullModalBtn').addEventListener('click', () => AF.openDetailModal(node.anime));
+
+        host.querySelector('#insWikiBtn').addEventListener('click', async (ev) => {
+          const btn = ev.currentTarget;
+          btn.disabled = true;
+          btn.textContent = 'Fetching Wiki...';
+          const wiki = await AF.fetchWikipediaSummary(title);
+          if (wiki?.extract) {
+            node.wikiText = wiki.extract;
+            recomputeGraphSimilarity();
+            if (neuralEnabled && neuralExtractor) await embedVisibleNodes();
+            AF.toast(`Attached Wikipedia profile to "${title}" & refreshed similarity!`, 'success');
+            renderInspector(node.id);
+          } else {
+            AF.toast('No matching English Wikipedia anime summary found.', 'warn');
+            btn.disabled = false;
+            btn.textContent = '📖 Attach Wikipedia';
+          }
+        });
+
+        host.querySelector('#insWlSaveBtn').addEventListener('click', () => {
+          AF.upsertWatchlistItem(a, {
+            status: host.querySelector('#insWlStatus').value,
+            rating: Number(host.querySelector('#insWlRating').value) || 0,
+            progress: Number(host.querySelector('#insWlProg').value) || 0,
+            notes: host.querySelector('#insWlNotes').value
+          });
+          AF.toast(`Saved "${title}" to shared Watchlist!`, 'success');
+          renderInspector(node.id);
+          renderNodeTable();
+        });
+
+        const rem = host.querySelector('#insWlRemoveBtn');
+        if (rem) {
+          rem.addEventListener('click', () => {
+            AF.removeWatchlistItem(a.id);
+            AF.toast(`Removed "${title}" from Watchlist.`, 'warn');
+            renderInspector(node.id);
+            renderNodeTable();
+          });
+        }
+
+        host.querySelectorAll('.ins-nb-row').forEach(btn => {
+          btn.addEventListener('click', () => {
+            selectedId = Number(btn.dataset.id);
+            renderInspector(selectedId);
+          });
+        });
+      }
+
+      // ----------------------------------------------------------------------
+      // Accessible Tabular Node List View (P1)
+      // ----------------------------------------------------------------------
+      function renderNodeTable() {
+        const tbody = document.getElementById('nodeTableBody');
+        const vis = getVisibleNodes();
+        const wl = AF.getState().watchlist;
+        tbody.innerHTML = vis.map(n => {
+          const a = n.anime;
+          const st = wl[a.id]?.status || (n.isSeed ? 'Seed' : '—');
+          const simEdge = selectedId && selectedId !== n.id
+            ? edges.find(e => (e.a.id === n.id && e.b.id === selectedId) || (e.b.id === n.id && e.a.id === selectedId))
+            : null;
+          return `
+            <tr tabindex="0" data-id="${n.id}" ${n.id === selectedId ? 'style="background:rgba(129,140,248,0.18);"' : ''}>
+              <td><strong>${AF.escapeHtml(AF.getDisplayTitle(a))}</strong></td>
+              <td><span class="badge badge-purple">${AF.escapeHtml(n.cluster)}</span></td>
+              <td>${a.averageScore ? a.averageScore + '%' : '—'}</td>
+              <td>${AF.formatCompactNumber(a.popularity)}</td>
+              <td>${AF.escapeHtml(st)}</td>
+              <td>${simEdge ? Math.round(simEdge.weight * 100) + '%' : (n.id === selectedId ? 'Selected' : '—')}</td>
+            </tr>
+          `;
+        }).join('');
+
+        tbody.querySelectorAll('tr').forEach(tr => {
+          const pick = () => {
+            selectedId = Number(tr.dataset.id);
+            renderInspector(selectedId);
+            renderNodeTable();
+          };
+          tr.addEventListener('click', pick);
+          tr.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pick(); }
+          });
+        });
+      }
+
+      // ----------------------------------------------------------------------
+      // High-DPI Canvas Rendering + Force Simulation + Cluster Halos
+      // ----------------------------------------------------------------------
+      function resizeCanvas() {
+        const rect = canvas.parentElement.getBoundingClientRect();
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+        canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+
+      function worldToScreen(wx, wy) {
+        const w = canvas.parentElement.clientWidth;
+        const h = canvas.parentElement.clientHeight;
+        return {
+          x: (wx - cam.x) * cam.zoom + w / 2,
+          y: (wy - cam.y) * cam.zoom + h / 2
+        };
+      }
+
+      function screenToWorld(sx, sy) {
+        const w = canvas.parentElement.clientWidth;
+        const h = canvas.parentElement.clientHeight;
+        return {
+          x: (sx - w / 2) / cam.zoom + cam.x,
+          y: (sy - h / 2) / cam.zoom + cam.y
+        };
+      }
+
+      function fitToView() {
+        const vis = getVisibleNodes();
+        if (!vis.length) return;
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const n of vis) {
+          if (n.x < minX) minX = n.x; if (n.x > maxX) maxX = n.x;
+          if (n.y < minY) minY = n.y; if (n.y > maxY) maxY = n.y;
+        }
+        cam.x = (minX + maxX) / 2;
+        cam.y = (minY + maxY) / 2;
+        const w = canvas.parentElement.clientWidth || 800;
+        const h = canvas.parentElement.clientHeight || 560;
+        const bw = Math.max(220, (maxX - minX) + 180);
+        const bh = Math.max(220, (maxY - minY) + 180);
+        cam.zoom = Math.max(0.35, Math.min(1.35, Math.min(w / bw, h / bh)));
+      }
+
+      function stepForce(vis) {
+        if (layoutMode !== 'force' || simAlpha < 0.01) return;
+        const N = vis.length;
+        // Repulsion
+        for (let i = 0; i < N; i++) {
+          for (let j = i + 1; j < N; j++) {
+            const dx = vis[j].x - vis[i].x || 0.1;
+            const dy = vis[j].y - vis[i].y || 0.1;
+            const distSq = Math.max(900, dx * dx + dy * dy);
+            const dist = Math.sqrt(distSq);
+            const force = (5200 / distSq) * simAlpha;
+            const fx = (dx / dist) * force;
+            const fy = (dy / dist) * force;
+            vis[i].vx -= fx; vis[i].vy -= fy;
+            vis[j].vx += fx; vis[j].vy += fy;
+          }
+        }
+        // Spring attraction along weighted edges
+        for (const e of edges) {
+          const dx = e.b.x - e.a.x;
+          const dy = e.b.y - e.a.y;
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          const target = 210 - Math.min(115, e.weight * 145);
+          const pull = (dist - target) * 0.015 * (0.4 + e.weight) * simAlpha;
+          const fx = (dx / dist) * pull;
+          const fy = (dy / dist) * pull;
+          e.a.vx += fx; e.a.vy += fy;
+          e.b.vx -= fx; e.b.vy -= fy;
+        }
+        // Centering gravity + damping
+        for (const n of vis) {
+          if (n.pinned || (dragState?.mode === 'node' && dragState.node === n)) {
+            n.vx = 0; n.vy = 0;
+            continue;
+          }
+          n.vx -= n.x * 0.0025 * simAlpha;
+          n.vy -= n.y * 0.0025 * simAlpha;
+          n.vx *= 0.84;
+          n.vy *= 0.84;
+          n.x += n.vx;
+          n.y += n.vy;
+        }
+        simAlpha *= 0.992;
+      }
+
+      function drawGraph() {
+        const w = canvas.parentElement.clientWidth;
+        const h = canvas.parentElement.clientHeight;
+        ctx.clearRect(0, 0, w, h);
+
+        const vis = getVisibleNodes();
+        stepForce(vis);
+
+        ctx.save();
+        ctx.translate(w / 2, h / 2);
+        ctx.scale(cam.zoom, cam.zoom);
+        ctx.translate(-cam.x, -cam.y);
+
+        // 1. Dashed radial cluster halos
+        for (const cl of clusters) {
+          const members = cl.members.filter(m => vis.includes(m));
+          if (members.length < 2) continue;
+          let cx = 0, cy = 0;
+          members.forEach(m => { cx += m.x; cy += m.y; });
+          cx /= members.length; cy /= members.length;
+          let maxR = 45;
+          members.forEach(m => {
+            const d = Math.hypot(m.x - cx, m.y - cy);
+            if (d > maxR) maxR = d;
+          });
+          const haloR = maxR + 46;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(cx, cy, haloR, 0, Math.PI * 2);
+          ctx.fillStyle = cl.color + '11';
+          ctx.fill();
+          ctx.setLineDash([7, 6]);
+          ctx.strokeStyle = cl.color + '66';
+          ctx.lineWidth = 1.6 / cam.zoom;
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.font = `700 ${Math.max(10, 12 / cam.zoom)}px system-ui, sans-serif`;
+          ctx.fillStyle = cl.color;
+          ctx.textAlign = 'center';
+          ctx.fillText(cl.label.toUpperCase(), cx, cy - haloR - 6);
+          ctx.restore();
+        }
+
+        // 2. Similarity edges
+        for (const e of edges) {
+          const isFocus = e.a.id === selectedId || e.b.id === selectedId;
+          ctx.beginPath();
+          ctx.moveTo(e.a.x, e.a.y);
+          ctx.lineTo(e.b.x, e.b.y);
+          ctx.strokeStyle = isFocus
+            ? `rgba(56, 189, 248, ${Math.min(0.85, 0.25 + e.weight)})`
+            : `rgba(148, 163, 184, ${Math.min(0.45, 0.08 + e.weight * 0.55)})`;
+          ctx.lineWidth = (isFocus ? 2.2 : 1 + e.weight * 1.4) / cam.zoom;
+          ctx.stroke();
+        }
+
+        // 3. Nodes with clipped cover artwork & status rings
+        const wl = AF.getState().watchlist;
+        for (const n of vis) {
+          const isSel = n.id === selectedId;
+          const isHov = n.id === hoveredId;
+          const r = n.isSeed ? 30 : (isSel ? 28 : 23);
+
+          // Determine ring color: Selected > Seed > Watchlist > Hidden Gem > Default
+          let ringColor = '#475569';
+          if ((n.anime.popularity || 0) < 35000) ringColor = '#fbbf24';
+          if (wl[n.id]) ringColor = '#34d399';
+          if (n.isSeed) ringColor = '#818cf8';
+          if (isSel) ringColor = '#38bdf8';
+
+          // Selection glow
+          if (isSel || isHov) {
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, r + 6, 0, Math.PI * 2);
+            ctx.fillStyle = isSel ? 'rgba(56, 189, 248, 0.28)' : 'rgba(129, 140, 248, 0.2)';
+            ctx.fill();
+          }
+
+          // Clipped cover artwork
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+          ctx.closePath();
+          ctx.fillStyle = '#0f172a';
+          ctx.fill();
+          ctx.clip();
+          if (n.img && n.img.complete && n.img.naturalWidth > 0) {
+            ctx.drawImage(n.img, n.x - r, n.y - r, r * 2, r * 2);
+          }
+          ctx.restore();
+
+          // Status Ring
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+          ctx.strokeStyle = ringColor;
+          ctx.lineWidth = (isSel ? 3.5 : 2.5);
+          ctx.stroke();
+
+          // Pin dot
+          if (n.pinned) {
+            ctx.beginPath();
+            ctx.arc(n.x + r * 0.72, n.y - r * 0.72, 5, 0, Math.PI * 2);
+            ctx.fillStyle = '#fb7185';
+            ctx.fill();
+          }
+
+          // Label below node
+          const label = AF.getDisplayTitle(n.anime);
+          const shortLbl = label.length > 22 ? label.slice(0, 21) + '…' : label;
+          ctx.font = `${isSel ? '700' : '600'} 11px system-ui, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.fillStyle = 'rgba(9, 13, 26, 0.78)';
+          const tw = ctx.measureText(shortLbl).width + 10;
+          ctx.fillRect(n.x - tw / 2, n.y + r + 5, tw, 16);
+          ctx.fillStyle = isSel ? '#38bdf8' : '#e2e8f0';
+          ctx.fillText(shortLbl, n.x, n.y + r + 16);
+        }
+
+        ctx.restore();
+        animHandle = requestAnimationFrame(drawGraph);
+      }
+
+      // ----------------------------------------------------------------------
+      // Pointer, Touch & Wheel Interaction
+      // ----------------------------------------------------------------------
+      function hitTestNode(sx, sy) {
+        const { x, y } = screenToWorld(sx, sy);
+        const vis = getVisibleNodes();
+        for (let i = vis.length - 1; i >= 0; i--) {
+          const n = vis[i];
+          const r = n.isSeed ? 32 : 26;
+          if (Math.hypot(n.x - x, n.y - y) <= r) return n;
+        }
+        return null;
+      }
+
+      canvas.addEventListener('pointerdown', (ev) => {
+        const rect = canvas.getBoundingClientRect();
+        const sx = ev.clientX - rect.left;
+        const sy = ev.clientY - rect.top;
+        const hit = hitTestNode(sx, sy);
+        canvas.setPointerCapture(ev.pointerId);
+        if (hit) {
+          dragState = { mode: 'node', node: hit, startX: sx, startY: sy, moved: false };
+          selectedId = hit.id;
+          renderInspector(selectedId);
+          renderNodeTable();
+        } else {
+          dragState = { mode: 'pan', startX: sx, startY: sy, camX: cam.x, camY: cam.y, moved: false };
+        }
+      });
+
+      canvas.addEventListener('pointermove', (ev) => {
+        const rect = canvas.getBoundingClientRect();
+        const sx = ev.clientX - rect.left;
+        const sy = ev.clientY - rect.top;
+        if (!dragState) {
+          const hit = hitTestNode(sx, sy);
+          hoveredId = hit ? hit.id : null;
+          canvas.style.cursor = hit ? 'pointer' : 'grab';
+          return;
+        }
+        const dx = sx - dragState.startX;
+        const dy = sy - dragState.startY;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragState.moved = true;
+
+        if (dragState.mode === 'node') {
+          const wPos = screenToWorld(sx, sy);
+          dragState.node.x = wPos.x;
+          dragState.node.y = wPos.y;
+          dragState.node.pinned = true;
+          simAlpha = Math.max(simAlpha, 0.25);
+        } else {
+          cam.x = dragState.camX - dx / cam.zoom;
+          cam.y = dragState.camY - dy / cam.zoom;
+        }
+      });
+
+      canvas.addEventListener('pointerup', () => { dragState = null; });
+      canvas.addEventListener('dblclick', (ev) => {
+        const rect = canvas.getBoundingClientRect();
+        const hit = hitTestNode(ev.clientX - rect.left, ev.clientY - rect.top);
+        if (hit) {
+          hit.pinned = !hit.pinned;
+          renderInspector(hit.id);
+        }
+      });
+
+      canvas.addEventListener('wheel', (ev) => {
+        ev.preventDefault();
+        const factor = ev.deltaY < 0 ? 1.12 : 0.89;
+        cam.zoom = Math.max(0.25, Math.min(2.8, cam.zoom * factor));
+      }, { passive: false });
+
+      // ----------------------------------------------------------------------
+      // Toolbar Controls Wiring
+      // ----------------------------------------------------------------------
+      document.getElementById('runVibeBtn').addEventListener('click', () => runVibeSearch(document.getElementById('vibePromptInput').value));
+      document.getElementById('vibePromptInput').addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') runVibeSearch(ev.target.value);
+      });
+
+      document.querySelectorAll('.vibe-chip').forEach(btn => {
+        btn.addEventListener('click', () => runVibeSearch(btn.dataset.vibe));
+      });
+
+      // Seed anime autocomplete
+      const seedInp = document.getElementById('seedSearchInput');
+      const seedDrop = document.getElementById('seedDropdown');
+      let seedTimer = null;
+      seedInp.addEventListener('input', () => {
+        const q = seedInp.value.trim();
+        if (seedTimer) clearTimeout(seedTimer);
+        if (q.length < 2) { seedDrop.classList.remove('open'); return; }
+        seedTimer = setTimeout(async () => {
+          const hits = await AF.searchAnimeQuick(q, 6);
+          if (!hits.length) { seedDrop.classList.remove('open'); return; }
+          seedDrop.innerHTML = hits.map(m => `
+            <div class="search-item" data-id="${m.id}">
+              <img src="${AF.escapeHtml(AF.getCover(m))}" alt="">
+              <div>
+                <div style="font-weight:700;font-size:13px;">${AF.escapeHtml(AF.getDisplayTitle(m))}</div>
+                <div style="font-size:11px;color:var(--text-muted);">${m.seasonYear || ''} · ★ ${m.averageScore || '—'}%</div>
+              </div>
+            </div>
+          `).join('');
+          seedDrop.classList.add('open');
+          seedDrop.querySelectorAll('.search-item').forEach(row => {
+            row.addEventListener('click', () => {
+              seedDrop.classList.remove('open');
+              seedInp.value = '';
+              seedByAnimeId(Number(row.dataset.id));
+            });
+          });
+        }, 300);
+      });
+      document.addEventListener('click', (ev) => {
+        if (!ev.target.closest('#seedSearchInput') && !ev.target.closest('#seedDropdown')) seedDrop.classList.remove('open');
+      });
+
+      document.getElementById('seedWatchlistBtn').addEventListener('click', seedByWatchlist);
+
+      document.getElementById('layoutForceBtn').addEventListener('click', () => {
+        layoutMode = 'force';
+        document.getElementById('layoutForceBtn').classList.add('active');
+        document.getElementById('layoutTsneBtn').classList.remove('active');
+        simAlpha = 0.9;
+      });
+
+      document.getElementById('layoutTsneBtn').addEventListener('click', () => {
+        layoutMode = 'tsne';
+        document.getElementById('layoutTsneBtn').classList.add('active');
+        document.getElementById('layoutForceBtn').classList.remove('active');
+        recomputeGraphSimilarity();
+      });
+
+      document.querySelectorAll('.gem-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          gemCeiling = Number(btn.dataset.gem) || 0;
+          document.querySelectorAll('.gem-btn').forEach(b => b.classList.toggle('active', b === btn));
+          recomputeGraphSimilarity();
+          fitToView();
+        });
+      });
+
+      document.getElementById('fitViewBtn').addEventListener('click', fitToView);
+      document.getElementById('unpinAllBtn').addEventListener('click', () => {
+        nodes.forEach(n => { n.pinned = false; });
+        simAlpha = 0.7;
+        if (selectedId) renderInspector(selectedId);
+      });
+
+      document.getElementById('toggleTableBtn').addEventListener('click', (ev) => {
+        const wrap = document.getElementById('nodeTableWrap');
+        const open = !wrap.classList.contains('open');
+        wrap.classList.toggle('open', open);
+        ev.currentTarget.setAttribute('aria-pressed', String(open));
+        ev.currentTarget.classList.toggle('btn-primary', open);
+        if (open) renderNodeTable();
+      });
+
+      AF.onStateChange(() => {
+        if (selectedId) renderInspector(selectedId);
+        renderNodeTable();
+      });
+
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+      animHandle = requestAnimationFrame(drawGraph);
+
+      // Boot deep-link routing (?seed=, ?vibe=, ?mode=watchlist)
+      const params = new URLSearchParams(window.location.search);
+      const deepSeed = Number(params.get('seed'));
+      const deepVibe = params.get('vibe');
+      const deepMode = params.get('mode');
+      if (deepSeed) {
+        seedByAnimeId(deepSeed);
+      } else if (deepVibe) {
+        runVibeSearch(deepVibe);
+      } else if (deepMode === 'watchlist') {
+        seedByWatchlist();
+      } else {
+        runVibeSearch('90s cyberpunk noir');
+      }
+    })();
+  </script>
+</body>
+</html>
