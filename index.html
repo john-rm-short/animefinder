@@ -49,11 +49,15 @@
             </div>
           </div>
           <div class="meta-row">
+            <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-muted);cursor:pointer;">
+              <input type="checkbox" id="releasesJpOnly" checked> JP Anime only
+            </label>
             <select id="dubFilterSelect" class="select" aria-label="Filter by Dub status">
-              <option value="all">Dub: All</option>
-              <option value="dubbed">Dubbed / Simuldub</option>
-              <option value="sub">Sub Only</option>
+              <option value="all">Audio: All</option>
+              <option value="dubbed">Verified EN Dub / Simuldub</option>
+              <option value="sub">Sub / No EN VA Listed</option>
             </select>
+            <button type="button" class="btn btn-sm" id="toggleCompactBtn" title="Toggle compact card grid">⊞ Compact</button>
             <button type="button" class="btn btn-sm btn-cyan" id="batchTmdbBtn" title="Enrich visible cards with TMDB US JustWatch providers">TMDB US Batch Enrich</button>
             <button type="button" class="btn btn-sm" id="refreshReleasesBtn">↻ Refresh</button>
           </div>
@@ -73,6 +77,9 @@
             <div id="scheduleRangeLabel" style="font-size:12px;color:var(--text-muted);margin-top:2px;">Loading local week bounds...</div>
           </div>
           <div class="meta-row">
+            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-muted);cursor:pointer;">
+              <input type="checkbox" id="scheduleJpOnly" checked> JP Anime only
+            </label>
             <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-muted);cursor:pointer;">
               <input type="checkbox" id="scheduleWatchlistOnly"> Watchlist only
             </label>
@@ -108,33 +115,53 @@
 
       <!-- Persistence, Gist Sync, AniList Importer & API Keys -->
       <div class="grid-2">
-        <!-- Private GitHub Gist Auto-Sync -->
-        <div class="panel">
+        <!-- Permanent Remote Storage: Private GitHub Gist Wizard -->
+        <div class="panel" style="grid-column: 1 / -1;">
           <div class="panel-header">
-            <h3 class="panel-title">Private GitHub Gist Auto-Sync</h3>
-            <span class="badge badge-cyan" id="gistStatusBadge">Standardized: animefinder-sync.json</span>
+            <div>
+              <h3 class="panel-title">☁️ Permanent Remote Storage (Private GitHub Gist)</h3>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">
+                Free, private, version-controlled cloud storage for your Watchlist, ratings, notes, and platform/dub overrides across all devices. Auto-pulls on boot &amp; auto-pushes 1.5s after any edit to <code>animefinder-sync.json</code>.
+              </div>
+            </div>
+            <span class="badge badge-cyan" id="gistStatusBadge">Local Only</span>
           </div>
-          <p style="font-size:12px;color:var(--text-muted);margin-top:0;">
-            GitHub Pages shares storage automatically across all 3 pages on the same browser. Configure a Private Gist (PAT scoped strictly to <code>gist</code>) for cross-device auto-pull on boot and 1.5s debounced auto-push with tombstone conflict resolution.
-          </p>
+
+          <div class="wizard-steps" id="gistWizardSteps">
+            <div class="wizard-step" id="wizStep1">
+              <div style="font-weight:700;font-size:12.5px;margin-bottom:4px;"><span class="wizard-step-num">1</span>Generate Minimal Token</div>
+              <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:8px;">Creates a GitHub token scoped <strong>only to <code>gist</code></strong> (cannot touch your repos).</div>
+              <a class="btn btn-xs btn-cyan" href="https://github.com/settings/tokens/new?scopes=gist&amp;description=AnimeFinder+Permanent+Sync" target="_blank" rel="noopener">Open GitHub Token Page ↗</a>
+            </div>
+            <div class="wizard-step" id="wizStep2">
+              <div style="font-weight:700;font-size:12.5px;margin-bottom:4px;"><span class="wizard-step-num">2</span>Connect &amp; Auto-Discover</div>
+              <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:6px;">Paste your token below. AnimeFinder automatically finds your existing sync Gist (for 1-click phone/new-browser setup) or creates a new Private Gist.</div>
+            </div>
+            <div class="wizard-step" id="wizStep3">
+              <div style="font-weight:700;font-size:12.5px;margin-bottom:4px;"><span class="wizard-step-num">3</span>Permanent Auto-Sync Active</div>
+              <div id="gistConnectedInfo" style="font-size:11.5px;color:var(--text-muted);">Not connected yet. Every push keeps full Git revision history on GitHub.</div>
+            </div>
+          </div>
+
           <div class="form-grid" style="margin-bottom:10px;">
             <div class="form-field">
-              <label for="gistTokenInput">GitHub Personal Access Token (gist scope)</label>
+              <label for="gistTokenInput">GitHub Personal Access Token (<code>gist</code> scope only)</label>
               <input id="gistTokenInput" type="password" class="input input-full" placeholder="ghp_... or github_pat_...">
             </div>
             <div class="form-field">
-              <label for="gistIdInput">Gist ID (leave blank to create new)</label>
-              <input id="gistIdInput" type="text" class="input input-full" placeholder="32-char hex Gist ID">
+              <label for="gistIdInput">Private Gist ID (auto-filled on Connect)</label>
+              <input id="gistIdInput" type="text" class="input input-full" placeholder="Auto-discovered or created automatically">
             </div>
           </div>
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-muted);margin-bottom:12px;cursor:pointer;">
-            <input type="checkbox" id="gistAutoSyncCheck" checked> Enable auto-pull on boot &amp; 1.5s debounced auto-push
+            <input type="checkbox" id="gistAutoSyncCheck" checked> Enable auto-pull on boot &amp; 1.5s debounced auto-push across all 3 pages
           </label>
           <div class="meta-row">
-            <button type="button" class="btn btn-primary btn-sm" id="saveGistConfigBtn">Save Gist Config</button>
-            <button type="button" class="btn btn-emerald btn-sm" id="createGistBtn">+ Create Private Gist</button>
-            <button type="button" class="btn btn-sm" id="pullGistBtn">↓ Pull Now</button>
+            <button type="button" class="btn btn-primary btn-sm" id="connectGistWizardBtn">⚡ Connect &amp; Auto-Setup Private Gist</button>
+            <button type="button" class="btn btn-sm" id="saveGistConfigBtn">Save Manual ID</button>
+            <button type="button" class="btn btn-emerald btn-sm" id="pullGistBtn">↓ Pull &amp; Merge</button>
             <button type="button" class="btn btn-sm" id="pushGistBtn">↑ Push Now</button>
+            <button type="button" class="btn btn-danger btn-xs" id="disconnectGistBtn" style="margin-left:auto;" hidden>Disconnect</button>
           </div>
           <div id="gistLastSyncLabel" style="font-size:11.5px;color:var(--text-dim);margin-top:8px;"></div>
         </div>
@@ -444,7 +471,9 @@
           : '';
 
         const bottomBadges = [];
-        bottomBadges.push(`<span class="badge badge-cyan">${AF.escapeHtml(dub)}</span>`);
+        if (dub !== 'Sub / No EN VA') {
+          bottomBadges.push(`<span class="badge badge-cyan" title="Verified English voice cast on AniList or override">${AF.escapeHtml(dub)}</span>`);
+        }
         if (freeAds) bottomBadges.push(`<span class="badge badge-amber">Free w/ Ads</span>`);
         if (options.extraBadge) bottomBadges.push(options.extraBadge);
 
@@ -457,6 +486,7 @@
                 <div>${topRight}</div>
               </div>
               <div class="anime-card-overlay-bottom">${bottomBadges.join('')}</div>
+              ${!options.watchlistControls ? `<button type="button" class="quick-wl-btn ${wl ? 'saved' : ''}" data-quick-wl="${anime.id}" title="${wl ? 'Saved in Watchlist (click to edit)' : 'Quick-add to Plan to Watch'}">${wl ? '✓ Saved' : '+ Save'}</button>` : ''}
             </div>
             <div class="anime-card-body">
               <h3 class="anime-card-title" title="${AF.escapeHtml(title)}">${AF.escapeHtml(title)}</h3>
@@ -489,6 +519,20 @@
             if (ev.key === 'Enter' || ev.key === ' ') {
               ev.preventDefault();
               open();
+            }
+          });
+        });
+        container.querySelectorAll('[data-quick-wl]').forEach(btn => {
+          btn.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            const id = Number(btn.dataset.quickWl);
+            const item = itemsById.get(id);
+            const existing = AF.getState().watchlist[id];
+            if (existing) {
+              AF.openDetailModal(item || id);
+            } else if (item) {
+              AF.upsertWatchlistItem(item, { status: 'Plan to Watch' });
+              AF.toast(`Added "${AF.getDisplayTitle(item)}" to Plan to Watch!`, 'success', 2000);
             }
           });
         });
@@ -526,17 +570,18 @@
         const nowSec = Math.floor(Date.now() / 1000);
         const start72h = nowSec - 72 * 3600;
 
-        // Determine server-side licensedBy_in when filtering a specific platform or Free w/ Ads
+        // Determine server-side licensedBy_in using verified multi-alias arrays
         let licensedByList = null;
         if (activePlatform === 'free') {
-          licensedByList = AF.PLATFORM_CONFIG.filter(p => p.freeWithAds).map(p => p.licensedBy);
+          licensedByList = AF.PLATFORM_CONFIG.filter(p => p.freeWithAds).flatMap(p => p.licensedByValues || [p.licensedBy]);
         } else if (activePlatform !== 'all' && AF.PLATFORM_BY_ID[activePlatform]) {
-          licensedByList = [AF.PLATFORM_BY_ID[activePlatform].licensedBy];
+          const p = AF.PLATFORM_BY_ID[activePlatform];
+          licensedByList = p.licensedByValues || [p.licensedBy];
         }
 
         const query = `
           query ($start: Int, $end: Int ${licensedByList ? ', $licensed: [String]' : ''}) {
-            past72h: Page(page: 1, perPage: 45) {
+            past72h: Page(page: 1, perPage: 50) {
               airingSchedules(airingAt_greater: $start, airingAt_lesser: $end, sort: TIME_DESC) {
                 id
                 episode
@@ -550,7 +595,7 @@
               }
             }
             ${licensedByList ? `
-            catalog: Page(page: 1, perPage: 35) {
+            catalog: Page(page: 1, perPage: 40) {
               media(type: ANIME, isAdult: false, licensedBy_in: $licensed, sort: [TRENDING_DESC, POPULARITY_DESC]) {
                 ${AF.MEDIA_CARD_FIELDS}
               }
@@ -561,7 +606,7 @@
         if (licensedByList) vars.licensed = licensedByList;
 
         try {
-          const cacheKey = forceRefresh ? null : `releases_v1_${activePlatform}`;
+          const cacheKey = forceRefresh ? null : `releases_v2_${activePlatform}`;
           const data = await AF.anilistQuery(query, vars, { cacheKey, ttl: AF.TTL_DYNAMIC });
 
           const mergedMap = new Map();
@@ -570,21 +615,30 @@
             const m = sched.media;
             if (!m || m.isAdult) continue;
             if (!mergedMap.has(m.id)) {
-              mergedMap.set(m.id, { ...m, _recentEp: sched.episode, _recentAirAt: sched.airingAt, _source: 'simulcast' });
+              mergedMap.set(m.id, { ...m, _recentEp: sched.episode, _recentAirAt: sched.airingAt, _source: 'simulcast', _inCatalog: false, _matchedPlatforms: [] });
             }
           }
           // 2. Active ONAs / currently releasing batches
           for (const m of (data?.activeOnas?.media || [])) {
             if (!m || m.isAdult) continue;
             if (!mergedMap.has(m.id)) {
-              mergedMap.set(m.id, { ...m, _source: m.format === 'ONA' ? 'ona' : 'airing' });
+              mergedMap.set(m.id, { ...m, _source: m.format === 'ONA' ? 'ona' : 'airing', _inCatalog: false, _matchedPlatforms: [] });
             }
           }
-          // 3. Server-side licensedBy_in catalog
+          // 3. Server-side licensedBy_in catalog (tag even if already in mergedMap!)
           for (const m of (data?.catalog?.media || [])) {
             if (!m || m.isAdult) continue;
-            if (!mergedMap.has(m.id)) {
-              mergedMap.set(m.id, { ...m, _source: 'catalog' });
+            const existing = mergedMap.get(m.id);
+            if (existing) {
+              existing._inCatalog = true;
+              if (activePlatform !== 'all' && activePlatform !== 'free') existing._matchedPlatforms.push(activePlatform);
+            } else {
+              mergedMap.set(m.id, {
+                ...m,
+                _source: 'catalog',
+                _inCatalog: true,
+                _matchedPlatforms: (activePlatform !== 'all' && activePlatform !== 'free') ? [activePlatform] : []
+              });
             }
           }
 
@@ -600,22 +654,25 @@
         const grid = document.getElementById('releasesGrid');
         const meta = document.getElementById('releasesMeta');
         const nowSec = Math.floor(Date.now() / 1000);
+        const jpOnly = document.getElementById('releasesJpOnly')?.checked;
 
         const filtered = releasesCache.filter(m => {
+          if (jpOnly && m.countryOfOrigin && m.countryOfOrigin !== 'JP') return false;
           const extra = tmdbExtraByAnimeId.get(m.id) || [];
           const platforms = AF.detectPlatforms(m, extra);
           if (activePlatform === 'free') {
-            if (!AF.isFreeWithAds(m, platforms) && m._source !== 'catalog') return false;
+            if (!AF.isFreeWithAds(m, platforms) && !m._inCatalog) return false;
           } else if (activePlatform !== 'all') {
-            if (!platforms.some(p => p.id === activePlatform) && m._source !== 'catalog') return false;
+            if (!platforms.some(p => p.id === activePlatform) && !m._inCatalog) return false;
           }
-          const dub = AF.classifyDub(m, platforms);
-          if (activeDubFilter === 'dubbed' && dub === 'Sub Only') return false;
-          if (activeDubFilter === 'sub' && dub !== 'Sub Only') return false;
+          const dub = AF.classifyDub(m);
+          const isDubbed = dub === 'EN Dub' || dub === 'Simuldub';
+          if (activeDubFilter === 'dubbed' && !isDubbed) return false;
+          if (activeDubFilter === 'sub' && isDubbed) return false;
           return true;
         });
 
-        meta.textContent = `Showing ${filtered.length} titles (${activePlatform === 'all' ? 'Past 72h Simulcasts + Active ONAs' : activePlatform === 'free' ? 'Free w/ Ads Catalog + Airing' : AF.PLATFORM_BY_ID[activePlatform]?.name + ' Catalog + Airing'})`;
+        meta.textContent = `Showing ${filtered.length} titles (${activePlatform === 'all' ? 'Past 72h Simulcasts + Active ONAs' : activePlatform === 'free' ? 'Free w/ Ads Catalog + Airing' : AF.PLATFORM_BY_ID[activePlatform]?.name + ' Catalog + Airing'}${jpOnly ? ' · JP only' : ' · All origins'})`;
 
         if (!filtered.length) {
           grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">No releases matched the current platform/dub filters. Try switching filters or adding custom overrides in the Detail Modal.</div>`;
@@ -643,6 +700,15 @@
       document.getElementById('dubFilterSelect').addEventListener('change', (ev) => {
         activeDubFilter = ev.target.value;
         renderReleasesGrid();
+      });
+      document.getElementById('releasesJpOnly').addEventListener('change', renderReleasesGrid);
+      document.getElementById('toggleCompactBtn').addEventListener('click', (ev) => {
+        const isComp = !document.getElementById('releasesGrid').classList.contains('compact');
+        ['releasesGrid', 'watchlistGrid', 'upcomingGrid', 'archivesGrid'].forEach(id => {
+          document.getElementById(id)?.classList.toggle('compact', isComp);
+        });
+        ev.currentTarget.classList.toggle('btn-primary', isComp);
+        ev.currentTarget.textContent = isComp ? '⊞ Comfortable' : '⊞ Compact';
       });
 
       document.getElementById('refreshReleasesBtn').addEventListener('click', () => loadReleases(true));
@@ -687,7 +753,8 @@
         const grid = document.getElementById('scheduleGrid');
         const rangeLbl = document.getElementById('scheduleRangeLabel');
         const { mon, sun, startSec, endSec } = getLocalWeekBounds();
-        rangeLbl.textContent = `Local week: ${mon.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} 00:00 → ${sun.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} 23:59 (up to 150 episodes batched in 1 request)`;
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local Time';
+        rangeLbl.textContent = `Local week (${tz}): ${mon.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} 00:00 → ${sun.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} 23:59 (up to 200 episodes batched in 1 request)`;
         grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><span class="spinner"></span> Fetching full Mon–Sun schedule...</div>`;
 
         const schedFields = `
@@ -701,15 +768,17 @@
             p1: Page(page: 1, perPage: 50) { airingSchedules(airingAt_greater: $start, airingAt_lesser: $end, sort: TIME) { ${schedFields} } }
             p2: Page(page: 2, perPage: 50) { airingSchedules(airingAt_greater: $start, airingAt_lesser: $end, sort: TIME) { ${schedFields} } }
             p3: Page(page: 3, perPage: 50) { airingSchedules(airingAt_greater: $start, airingAt_lesser: $end, sort: TIME) { ${schedFields} } }
+            p4: Page(page: 4, perPage: 50) { airingSchedules(airingAt_greater: $start, airingAt_lesser: $end, sort: TIME) { ${schedFields} } }
           }
         `;
         try {
-          const cacheKey = forceRefresh ? null : `schedule_week_${startSec}`;
+          const cacheKey = forceRefresh ? null : `schedule_week_v2_${startSec}`;
           const data = await AF.anilistQuery(query, { start: startSec, end: endSec }, { cacheKey, ttl: AF.TTL_DYNAMIC });
           const all = [
             ...(data?.p1?.airingSchedules || []),
             ...(data?.p2?.airingSchedules || []),
-            ...(data?.p3?.airingSchedules || [])
+            ...(data?.p3?.airingSchedules || []),
+            ...(data?.p4?.airingSchedules || [])
           ].filter(s => s?.media && !s.media.isAdult);
           scheduleCache = all;
           renderScheduleGrid();
@@ -721,6 +790,7 @@
       function renderScheduleGrid() {
         const grid = document.getElementById('scheduleGrid');
         const wlOnly = document.getElementById('scheduleWatchlistOnly').checked;
+        const jpOnly = document.getElementById('scheduleJpOnly').checked;
         const wl = AF.getState().watchlist;
         const nowSec = Math.floor(Date.now() / 1000);
         const todayJsDay = new Date().getDay();
@@ -730,6 +800,7 @@
         const buckets = Array.from({ length: 7 }, () => []);
 
         for (const item of scheduleCache) {
+          if (jpOnly && item.media.countryOfOrigin && item.media.countryOfOrigin !== 'JP') continue;
           if (wlOnly && !wl[item.media.id]) continue;
           const d = new Date(item.airingAt * 1000);
           // Explicit day-0 Sunday bucketing at index 6
@@ -784,6 +855,7 @@
       }
 
       document.getElementById('scheduleWatchlistOnly').addEventListener('change', renderScheduleGrid);
+      document.getElementById('scheduleJpOnly').addEventListener('change', renderScheduleGrid);
       document.getElementById('refreshScheduleBtn').addEventListener('click', () => loadSchedule(true));
 
       // ----------------------------------------------------------------------
@@ -867,19 +939,72 @@
           });
         }
 
-        // Populate settings inputs
+        // Populate settings inputs & Permanent Remote Storage Wizard state
+        const hasToken = Boolean(state.settings.gistToken);
+        const hasGist = Boolean(state.settings.gistToken && state.settings.gistId);
         document.getElementById('gistTokenInput').value = state.settings.gistToken || '';
         document.getElementById('gistIdInput').value = state.settings.gistId || '';
         document.getElementById('gistAutoSyncCheck').checked = state.settings.gistAutoSync !== false;
         document.getElementById('tmdbKeyInput').value = state.settings.tmdbKey || '';
         document.getElementById('anilistImportUser').value = state.settings.anilistUsername || '';
+
+        document.getElementById('wizStep1').classList.toggle('done', hasToken);
+        document.getElementById('wizStep2').classList.toggle('done', hasGist);
+        document.getElementById('wizStep3').classList.toggle('done', hasGist);
+        document.getElementById('disconnectGistBtn').hidden = !hasGist;
+
+        const badge = document.getElementById('gistStatusBadge');
+        const info = document.getElementById('gistConnectedInfo');
+        if (hasGist) {
+          const gistUrl = state.settings.gistUrl || `https://gist.github.com/${state.settings.gistId}`;
+          const revUrl = `${gistUrl}/revisions`;
+          badge.className = 'badge badge-emerald';
+          badge.textContent = state.settings.gistUser ? `Connected: @${state.settings.gistUser}` : 'Permanent Gist Connected';
+          info.innerHTML = `
+            Synced to <code>animefinder-sync.json</code> (${Object.keys(state.watchlist).length} titles · ${Object.keys(state.overrides || {}).length} overrides · ${Object.keys(state.tombstones || {}).length} tombstones).
+            <div class="meta-row" style="margin-top:6px;">
+              <a class="btn btn-xs btn-cyan" href="${AF.escapeHtml(gistUrl)}" target="_blank" rel="noopener">View Private Gist ↗</a>
+              <a class="btn btn-xs" href="${AF.escapeHtml(revUrl)}" target="_blank" rel="noopener">Revision History ↗</a>
+            </div>
+          `;
+        } else {
+          badge.className = 'badge badge-cyan';
+          badge.textContent = 'Local Storage Only';
+          info.textContent = 'Not connected yet. Every push keeps full Git revision history on GitHub.';
+        }
+
         document.getElementById('gistLastSyncLabel').textContent = state.settings.lastGistSync
-          ? `Last Gist sync: ${new Date(state.settings.lastGistSync).toLocaleString()}`
-          : 'Not yet synced with a GitHub Gist.';
+          ? `Last cloud sync: ${new Date(state.settings.lastGistSync).toLocaleString()}`
+          : 'Not yet synced with a Private GitHub Gist.';
         refreshCacheStatsUI();
       }
 
       document.getElementById('wlSortSelect').addEventListener('change', renderSavedTab);
+
+      document.getElementById('connectGistWizardBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('connectGistWizardBtn');
+        const token = document.getElementById('gistTokenInput').value.trim();
+        if (!token) {
+          AF.toast('Step 1: Open the GitHub Token Page, generate a gist-scoped token, and paste it here.', 'warn');
+          return;
+        }
+        btn.disabled = true;
+        btn.textContent = 'Connecting...';
+        try {
+          const res = await AF.gistConnectAndSetup(token, { autoCreate: true });
+          if (res.mode === 'connected_existing') {
+            AF.toast(`Connected to @${res.login}'s existing Private Gist & merged ${res.count} titles!`, 'success', 4500);
+          } else {
+            AF.toast(`Created Private Gist for @${res.login} & backed up ${res.count} titles!`, 'success', 4500);
+          }
+          renderSavedTab();
+        } catch (err) {
+          AF.toast(err.message, 'error', 4500);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = '⚡ Connect & Auto-Setup Private Gist';
+        }
+      });
 
       document.getElementById('saveGistConfigBtn').addEventListener('click', () => {
         AF.updateSettings({
@@ -888,16 +1013,17 @@
           gistAutoSync: document.getElementById('gistAutoSyncCheck').checked
         });
         AF.toast('Saved GitHub Gist configuration.', 'success');
+        renderSavedTab();
       });
 
-      document.getElementById('createGistBtn').addEventListener('click', async () => {
-        const token = document.getElementById('gistTokenInput').value.trim();
-        const id = await AF.gistCreateNew(token);
-        if (id) document.getElementById('gistIdInput').value = id;
+      document.getElementById('disconnectGistBtn').addEventListener('click', () => {
+        AF.gistDisconnect();
+        AF.toast('Disconnected Private Gist (local Watchlist preserved).', 'info');
+        renderSavedTab();
       });
 
-      document.getElementById('pullGistBtn').addEventListener('click', () => AF.gistPull());
-      document.getElementById('pushGistBtn').addEventListener('click', () => AF.gistPush());
+      document.getElementById('pullGistBtn').addEventListener('click', async () => { await AF.gistPull(); renderSavedTab(); });
+      document.getElementById('pushGistBtn').addEventListener('click', async () => { await AF.gistPush(); renderSavedTab(); });
 
       document.getElementById('importAnilistBtn').addEventListener('click', async () => {
         const btn = document.getElementById('importAnilistBtn');
@@ -1029,9 +1155,24 @@
 
         if (!items) {
           const rssUrl = 'https://www.animenewsnetwork.com/all/rss.xml?ann-edition=us';
-          // Try rss2json first
+          const fetchTimed = async (url, ms = 4200) => {
+            const ctrl = new AbortController();
+            const t = setTimeout(() => ctrl.abort(), ms);
+            try { return await fetch(url, { signal: ctrl.signal }); } finally { clearTimeout(t); }
+          };
+          const parseXmlItems = (xmlText) => {
+            const xml = new DOMParser().parseFromString(xmlText, 'text/xml');
+            const nodes = Array.from(xml.querySelectorAll('item')).slice(0, 15);
+            return nodes.length ? nodes.map(n => ({
+              title: n.querySelector('title')?.textContent || 'News Item',
+              link: n.querySelector('link')?.textContent || 'https://www.animenewsnetwork.com/news/',
+              pubDate: n.querySelector('pubDate')?.textContent || ''
+            })) : null;
+          };
+
+          // 1. rss2json
           try {
-            const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`);
+            const res = await fetchTimed(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`);
             if (res.ok) {
               const json = await res.json();
               if (Array.isArray(json.items) && json.items.length) {
@@ -1040,21 +1181,19 @@
             }
           } catch {}
 
-          // Fallback: allorigins XML parse
+          // 2. allorigins XML fallback
           if (!items) {
             try {
-              const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`);
-              if (res.ok) {
-                const xml = new DOMParser().parseFromString(await res.text(), 'text/xml');
-                const nodes = Array.from(xml.querySelectorAll('item')).slice(0, 15);
-                if (nodes.length) {
-                  items = nodes.map(n => ({
-                    title: n.querySelector('title')?.textContent || 'News Item',
-                    link: n.querySelector('link')?.textContent || 'https://www.animenewsnetwork.com/news/',
-                    pubDate: n.querySelector('pubDate')?.textContent || ''
-                  }));
-                }
-              }
+              const res = await fetchTimed(`https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`);
+              if (res.ok) items = parseXmlItems(await res.text());
+            } catch {}
+          }
+
+          // 3. codetabs XML fallback
+          if (!items) {
+            try {
+              const res = await fetchTimed(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(rssUrl)}`);
+              if (res.ok) items = parseXmlItems(await res.text());
             } catch {}
           }
 
@@ -1064,9 +1203,11 @@
         if (!items || !items.length) {
           host.innerHTML = `
             <div class="empty-state">
-              Public RSS proxy is temporarily busy. Launch ANN directly:
-              <div style="margin-top:10px;">
-                <a class="btn btn-sm btn-cyan" href="https://www.animenewsnetwork.com/news/" target="_blank" rel="noopener">Anime News Network Headlines ↗</a>
+              Public RSS proxies are temporarily rate-limited. Launch ANN feeds directly:
+              <div class="meta-row" style="justify-content:center;margin-top:10px;">
+                <a class="btn btn-sm btn-cyan" href="https://www.animenewsnetwork.com/news/" target="_blank" rel="noopener">ANN News ↗</a>
+                <a class="btn btn-sm" href="https://www.animenewsnetwork.com/review/" target="_blank" rel="noopener">Reviews ↗</a>
+                <a class="btn btn-sm" href="https://www.animenewsnetwork.com/feature/" target="_blank" rel="noopener">Features ↗</a>
               </div>
             </div>`;
           return;
@@ -1088,39 +1229,72 @@
         document.getElementById('ytDirectLink').href = directUrl;
 
         const host = document.getElementById('ytResultsList');
-        host.innerHTML = `<div class="empty-state"><span class="spinner"></span> Hunting YouTube via Piped...</div>`;
+        host.innerHTML = `<div class="empty-state"><span class="spinner"></span> Fetching official YouTube trailers &amp; videos...</div>`;
 
-        const cacheKey = `radar_yt_${q.toLowerCase()}`;
+        const cacheKey = `radar_yt_v2_${q.toLowerCase()}`;
         let items = await AF.cacheGet(cacheKey);
 
         if (!items) {
-          const instances = [
-            'https://pipedapi.kavin.rocks',
-            'https://pipedapi.adminforge.de',
-            'https://api.piped.private.coffee'
-          ];
-          for (const base of instances) {
-            try {
-              const ctrl = new AbortController();
-              const t = setTimeout(() => ctrl.abort(), 4500);
-              const res = await fetch(`${base}/search?q=${encodeURIComponent(q)}&filter=videos`, { signal: ctrl.signal });
-              clearTimeout(t);
-              if (res.ok) {
-                const json = await res.json();
-                if (Array.isArray(json.items) && json.items.length) {
-                  items = json.items.slice(0, 10).map(v => ({
-                    title: v.title,
-                    uploader: v.uploaderName || '',
-                    thumb: v.thumbnail || '',
-                    url: v.url?.startsWith('http') ? v.url : `https://www.youtube.com${v.url || ''}`,
-                    duration: v.duration ? `${Math.floor(v.duration / 60)}:${String(v.duration % 60).padStart(2, '0')}` : ''
-                  }));
+          const collected = [];
+          const seenUrls = new Set();
+
+          // 1. Reliable first-party source: Official YouTube trailers directly from AniList!
+          try {
+            const isGenericPv = /official trailer|pv|2026|hidden gem/i.test(q);
+            const trailerQuery = isGenericPv
+              ? `query { Page(page: 1, perPage: 24) { media(type: ANIME, isAdult: false, status_in: [RELEASING, NOT_YET_RELEASED], sort: [TRENDING_DESC, POPULARITY_DESC]) { id title { english romaji } seasonYear format trailer { id site thumbnail } } } }`
+              : `query ($search: String) { Page(page: 1, perPage: 16) { media(type: ANIME, isAdult: false, search: $search, sort: [SEARCH_MATCH, POPULARITY_DESC]) { id title { english romaji } seasonYear format trailer { id site thumbnail } } } }`;
+            const data = await AF.anilistQuery(trailerQuery, isGenericPv ? {} : { search: q }, { cacheKey: `yt_anilist_${q.toLowerCase()}`, ttl: AF.TTL_DYNAMIC });
+            for (const m of (data?.Page?.media || [])) {
+              if (m?.trailer?.site === 'youtube' && m.trailer.id) {
+                const url = `https://www.youtube.com/watch?v=${m.trailer.id}`;
+                if (seenUrls.has(url)) continue;
+                seenUrls.add(url);
+                collected.push({
+                  title: `${AF.getDisplayTitle(m)} — Official Trailer`,
+                  uploader: `AniList Verified · ${m.format || 'Anime'} ${m.seasonYear || ''}`.trim(),
+                  thumb: m.trailer.thumbnail || `https://i.ytimg.com/vi/${m.trailer.id}/hqdefault.jpg`,
+                  url,
+                  duration: 'Trailer'
+                });
+              }
+            }
+          } catch {}
+
+          // 2. Supplement with Piped search when fewer than 6 official trailers matched
+          if (collected.length < 6) {
+            const instances = ['https://pipedapi.kavin.rocks', 'https://pipedapi.adminforge.de'];
+            for (const base of instances) {
+              try {
+                const ctrl = new AbortController();
+                const t = setTimeout(() => ctrl.abort(), 3500);
+                const res = await fetch(`${base}/search?q=${encodeURIComponent(q)}&filter=videos`, { signal: ctrl.signal });
+                clearTimeout(t);
+                if (res.ok) {
+                  const json = await res.json();
+                  for (const v of (json.items || []).slice(0, 8)) {
+                    const url = v.url?.startsWith('http') ? v.url : `https://www.youtube.com${v.url || ''}`;
+                    if (!seenUrls.has(url)) {
+                      seenUrls.add(url);
+                      collected.push({
+                        title: v.title,
+                        uploader: v.uploaderName || '',
+                        thumb: v.thumbnail || '',
+                        url,
+                        duration: v.duration ? `${Math.floor(v.duration / 60)}:${String(v.duration % 60).padStart(2, '0')}` : ''
+                      });
+                    }
+                  }
                   break;
                 }
-              }
-            } catch {}
+              } catch {}
+            }
           }
-          if (items?.length) await AF.cacheSet(cacheKey, items, AF.TTL_DYNAMIC);
+
+          if (collected.length) {
+            items = collected.slice(0, 12);
+            await AF.cacheSet(cacheKey, items, AF.TTL_DYNAMIC);
+          }
         }
 
         if (!items || !items.length) {
@@ -1156,21 +1330,28 @@
       // ----------------------------------------------------------------------
       // TAB 5: ARCHIVES (By Year 1970–2026 & By Studio up to 75 titles via isMainStudio)
       // ----------------------------------------------------------------------
+      let activeArchiveDecade = null; // null = single year, or e.g. 1990 for full 1990-1999 decade
+
       function initArchiveControls() {
         const yrSel = document.getElementById('archiveYearSelect');
         let opts = '';
         for (let y = 2026; y >= 1970; y--) {
-          opts += `<option value="${y}" ${y === 2024 ? 'selected' : ''}>${y}</option>`;
+          opts += `<option value="${y}" ${y === 2026 ? 'selected' : ''}>${y}</option>`;
         }
         yrSel.innerHTML = opts;
+        yrSel.addEventListener('change', () => {
+          activeArchiveDecade = null;
+          document.querySelectorAll('.decade-pill').forEach(b => b.classList.remove('active'));
+        });
 
         const decBar = document.getElementById('decadeQuickPills');
         decBar.innerHTML = [2020, 2010, 2000, 1990, 1980, 1970].map(d =>
-          `<button type="button" class="pill decade-pill" data-year="${d === 2020 ? 2024 : d + 5}">${d}s</button>`
+          `<button type="button" class="pill decade-pill" data-decade="${d}">Full ${d}s</button>`
         ).join('');
         decBar.querySelectorAll('.decade-pill').forEach(btn => {
           btn.addEventListener('click', () => {
-            yrSel.value = btn.dataset.year;
+            activeArchiveDecade = Number(btn.dataset.decade);
+            decBar.querySelectorAll('.decade-pill').forEach(b => b.classList.toggle('active', b === btn));
             loadYearArchive();
           });
         });
@@ -1210,32 +1391,40 @@
       });
 
       async function loadYearArchive() {
-        const year = Number(document.getElementById('archiveYearSelect').value) || 2024;
+        const year = Number(document.getElementById('archiveYearSelect').value) || 2026;
         const format = document.getElementById('archiveFormatSelect').value;
         const sort = document.getElementById('archiveSortSelect').value;
         const grid = document.getElementById('archivesGrid');
         const meta = document.getElementById('archivesMeta');
-        grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><span class="spinner"></span> Loading ${year} archive...</div>`;
 
+        const startYr = activeArchiveDecade || year;
+        const endYr = activeArchiveDecade ? Math.min(2026, activeArchiveDecade + 9) : year;
+        const rangeLabel = activeArchiveDecade ? `${startYr}s (${startYr}–${endYr})` : String(year);
+        const startDate = startYr * 10000;
+        const endDate = endYr * 10000 + 1231;
+
+        grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><span class="spinner"></span> Loading ${rangeLabel} archive (TV, Movies, OVAs, ONAs)...</div>`;
+
+        // Uses startDate bounds instead of seasonYear so classic movies & OVAs are never excluded
         const query = `
-          query ($year: Int, $sort: [MediaSort] ${format ? ', $format: MediaFormat' : ''}) {
-            Page(page: 1, perPage: 40) {
-              media(type: ANIME, isAdult: false, seasonYear: $year ${format ? ', format: $format' : ''}, sort: $sort) {
+          query ($start: FuzzyDateInt, $end: FuzzyDateInt, $sort: [MediaSort] ${format ? ', $format: MediaFormat' : ''}) {
+            Page(page: 1, perPage: 45) {
+              media(type: ANIME, isAdult: false, startDate_greater: $start, startDate_lesser: $end ${format ? ', format: $format' : ''}, sort: $sort) {
                 ${AF.MEDIA_CARD_FIELDS}
               }
             }
           }
         `;
-        const vars = { year, sort: [sort] };
+        const vars = { start: startDate, end: endDate, sort: [sort] };
         if (format) vars.format = format;
         try {
-          const data = await AF.anilistQuery(query, vars, { cacheKey: `archive_year_${year}_${format}_${sort}`, ttl: AF.TTL_DYNAMIC });
+          const data = await AF.anilistQuery(query, vars, { cacheKey: `archive_range_v2_${startYr}_${endYr}_${format}_${sort}`, ttl: AF.TTL_DYNAMIC });
           const list = data?.Page?.media || [];
-          meta.textContent = `Year Archive: ${year}${format ? ' · ' + format : ''} — ${list.length} titles`;
+          meta.textContent = `Archive: ${rangeLabel}${format ? ' · ' + format : ''} — ${list.length} titles (includes Movies & OVAs)`;
           const byId = new Map(list.map(m => [m.id, m]));
           grid.innerHTML = list.length
             ? list.map(m => renderAnimeCard(m)).join('')
-            : `<div class="empty-state" style="grid-column:1/-1;">No titles found for ${year}.</div>`;
+            : `<div class="empty-state" style="grid-column:1/-1;">No titles found for ${rangeLabel}.</div>`;
           attachCardHandlers(grid, byId);
         } catch (err) {
           grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">Archive error: ${AF.escapeHtml(err.message)}</div>`;

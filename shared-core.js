@@ -25,119 +25,120 @@
     'Dropped'
   ];
 
-  const DUB_OPTIONS = ['', 'Dubbed', 'Simuldub', 'Sub Only'];
+  const DUB_OPTIONS = ['', 'EN Dub', 'Simuldub', 'Sub Only'];
 
   // Centralized 11-platform registry resolving Crunchyroll/HIDIVE bias
+  // licensedByValues covers exact AniList ExternalLink/licensedBy strings
   const PLATFORM_CONFIG = [
     {
       id: 'crunchyroll',
       name: 'Crunchyroll',
       licensedBy: 'Crunchyroll',
+      licensedByValues: ['Crunchyroll', 'Funimation'],
       aliases: ['crunchyroll', 'funimation'],
       domains: ['crunchyroll.com', 'funimation.com'],
       color: '#f97316',
-      freeWithAds: false,
-      dubLikely: true
+      freeWithAds: false
     },
     {
       id: 'hidive',
       name: 'HIDIVE',
       licensedBy: 'HIDIVE',
+      licensedByValues: ['HIDIVE'],
       aliases: ['hidive', 'sentai'],
       domains: ['hidive.com'],
       color: '#38bdf8',
-      freeWithAds: false,
-      dubLikely: true
+      freeWithAds: false
     },
     {
       id: 'netflix',
       name: 'Netflix',
       licensedBy: 'Netflix',
+      licensedByValues: ['Netflix'],
       aliases: ['netflix'],
       domains: ['netflix.com'],
       color: '#ef4444',
-      freeWithAds: false,
-      dubLikely: true
+      freeWithAds: false
     },
     {
       id: 'prime',
       name: 'Prime Video',
-      licensedBy: 'Amazon Prime Video',
+      licensedBy: 'Amazon',
+      licensedByValues: ['Amazon', 'Amazon Prime Video'],
       aliases: ['amazon', 'prime video', 'amazon prime video', 'amazon video'],
       domains: ['amazon.com', 'primevideo.com'],
       color: '#60a5fa',
-      freeWithAds: false,
-      dubLikely: false
+      freeWithAds: false
     },
     {
       id: 'hulu',
       name: 'Hulu',
       licensedBy: 'Hulu',
+      licensedByValues: ['Hulu'],
       aliases: ['hulu'],
       domains: ['hulu.com'],
       color: '#34d399',
-      freeWithAds: false,
-      dubLikely: true
+      freeWithAds: false
     },
     {
       id: 'disney',
       name: 'Disney+',
-      licensedBy: 'Disney Plus',
+      licensedBy: 'Disney+',
+      licensedByValues: ['Disney+', 'Disney Plus'],
       aliases: ['disney+', 'disney plus', 'disneyplus', 'star+'],
       domains: ['disneyplus.com'],
       color: '#818cf8',
-      freeWithAds: false,
-      dubLikely: true
+      freeWithAds: false
     },
     {
       id: 'tubi',
       name: 'Tubi',
       licensedBy: 'Tubi TV',
+      licensedByValues: ['Tubi TV', 'Tubi'],
       aliases: ['tubi', 'tubi tv'],
       domains: ['tubitv.com'],
       color: '#c084fc',
-      freeWithAds: true,
-      dubLikely: false
+      freeWithAds: true
     },
     {
       id: 'retrocrush',
       name: 'RetroCrush',
       licensedBy: 'RetroCrush',
+      licensedByValues: ['RetroCrush'],
       aliases: ['retrocrush', 'retro crush'],
       domains: ['retrocrush.tv'],
       color: '#fb7185',
-      freeWithAds: true,
-      dubLikely: false
+      freeWithAds: true
     },
     {
       id: 'pluto',
       name: 'Pluto TV',
       licensedBy: 'Pluto TV',
+      licensedByValues: ['Pluto TV'],
       aliases: ['pluto', 'pluto tv'],
       domains: ['pluto.tv'],
       color: '#fbbf24',
-      freeWithAds: true,
-      dubLikely: false
+      freeWithAds: true
     },
     {
       id: 'youtube',
       name: 'YouTube',
       licensedBy: 'YouTube',
+      licensedByValues: ['YouTube'],
       aliases: ['youtube', 'muse asia', 'ani-one', 'gundaminfo'],
       domains: ['youtube.com', 'youtu.be'],
       color: '#f87171',
-      freeWithAds: true,
-      dubLikely: false
+      freeWithAds: true
     },
     {
       id: 'oceanveil',
       name: 'OceanVeil',
       licensedBy: 'OceanVeil',
+      licensedByValues: ['OceanVeil'],
       aliases: ['oceanveil', 'ocean veil'],
       domains: ['oceanveil.net'],
       color: '#2dd4bf',
-      freeWithAds: false,
-      dubLikely: false
+      freeWithAds: false
     }
   ];
 
@@ -483,6 +484,8 @@
       ...(raw.settings || {}),
       gistToken: (raw.settings?.gistToken ?? legacyGist.token ?? ''),
       gistId: (raw.settings?.gistId ?? legacyGist.gistId ?? legacyGist.id ?? ''),
+      gistUser: raw.settings?.gistUser || '',
+      gistUrl: raw.settings?.gistUrl || '',
       gistFilename: GIST_FILENAME,
       gistAutoSync: raw.settings?.gistAutoSync !== undefined ? Boolean(raw.settings.gistAutoSync) : true,
       tmdbKey: raw.settings?.tmdbKey ?? raw.tmdbKey ?? '',
@@ -820,7 +823,14 @@
       });
       if (!res.ok) throw new Error(`GitHub API ${res.status}`);
       const created = await res.json();
-      updateSettings({ gistToken: token, gistId: created.id, gistAutoSync: true, lastGistSync: Date.now() });
+      updateSettings({
+        gistToken: token,
+        gistId: created.id,
+        gistUrl: created.html_url || `https://gist.github.com/${created.id}`,
+        gistUser: created.owner?.login || state.settings.gistUser || '',
+        gistAutoSync: true,
+        lastGistSync: Date.now()
+      });
       setSyncStatus('synced', 'Gist Synced');
       toast(`Created private Gist (${created.id.slice(0, 8)}...)!`, 'success');
       return created.id;
@@ -829,6 +839,73 @@
       toast(`Could not create Gist: ${err.message}`, 'error');
       return null;
     }
+  }
+
+  // Permanent Remote Storage Wizard: Verify PAT, detect GitHub username,
+  // auto-discover an existing animefinder-sync.json Gist, or create one automatically.
+  async function gistConnectAndSetup(token, { autoCreate = true } = {}) {
+    const cleanToken = String(token || '').trim();
+    if (!cleanToken) throw new Error('Paste a GitHub Personal Access Token (gist scope) first.');
+    setSyncStatus('syncing', 'Verifying GitHub...');
+
+    const headers = {
+      Authorization: `Bearer ${cleanToken}`,
+      Accept: 'application/vnd.github+json'
+    };
+
+    const userRes = await fetch('https://api.github.com/user', { headers });
+    if (!userRes.ok) {
+      setSyncStatus('error', 'Auth Failed');
+      throw new Error(userRes.status === 401 ? 'Invalid or expired GitHub token.' : `GitHub auth error (${userRes.status})`);
+    }
+    const user = await userRes.json();
+    const login = user.login || '';
+
+    // Check existing private/public gists for animefinder-sync.json or legacy animefinder-state.json
+    const gistsRes = await fetch('https://api.github.com/gists?per_page=100', { headers });
+    let existing = null;
+    if (gistsRes.ok) {
+      const list = await gistsRes.json();
+      if (Array.isArray(list)) {
+        existing = list.find(g => g.files?.[GIST_FILENAME] || g.files?.[LEGACY_GIST_FILENAME]);
+      }
+    }
+
+    if (existing) {
+      updateSettings({
+        gistToken: cleanToken,
+        gistId: existing.id,
+        gistUser: login,
+        gistUrl: existing.html_url || `https://gist.github.com/${login}/${existing.id}`,
+        gistAutoSync: true
+      });
+      const merged = await gistPull({ silent: true });
+      // Also push back if local had newer entries not yet in Gist
+      await gistPush({ silent: true });
+      return { mode: 'connected_existing', login, gistId: existing.id, htmlUrl: existing.html_url, count: Object.keys(merged?.watchlist || getState().watchlist).length };
+    }
+
+    if (!autoCreate) {
+      updateSettings({ gistToken: cleanToken, gistUser: login });
+      return { mode: 'verified_only', login, gistId: '', htmlUrl: '' };
+    }
+
+    const createdId = await gistCreateNew(cleanToken);
+    if (!createdId) throw new Error('Token verified, but creating the private Gist failed. Confirm the "gist" scope is checked.');
+    updateSettings({ gistUser: login });
+    const st = getState();
+    return {
+      mode: 'created_new',
+      login,
+      gistId: createdId,
+      htmlUrl: st.settings.gistUrl || `https://gist.github.com/${login}/${createdId}`,
+      count: Object.keys(st.watchlist || {}).length
+    };
+  }
+
+  function gistDisconnect() {
+    updateSettings({ gistToken: '', gistId: '', gistUser: '', gistUrl: '', lastGistSync: 0 });
+    setSyncStatus('local', 'Local Storage');
   }
 
   function scheduleGistAutoPush() {
@@ -902,7 +979,14 @@
       }
     }
 
-    // 3. Extra streaming sources (Jikan /streaming, TMDB US Watch Providers)
+    // 3. Server-side catalog tag if attached by Releases filter
+    if (Array.isArray(anime?._matchedPlatforms)) {
+      anime._matchedPlatforms.forEach(pid => {
+        if (PLATFORM_BY_ID[pid]) found.add(pid);
+      });
+    }
+
+    // 4. Extra streaming sources (Jikan /streaming, TMDB US Watch Providers)
     for (const name of extraStreaming) {
       const lower = String(name || '').toLowerCase();
       for (const p of PLATFORM_CONFIG) {
@@ -915,6 +999,35 @@
     return Array.from(found).map(pid => PLATFORM_BY_ID[pid]).filter(Boolean);
   }
 
+  function getStreamingLinks(anime, jikanStreaming = []) {
+    const out = [];
+    const seen = new Set();
+    const addLink = (name, url, color) => {
+      if (!url || !/^https?:\/\//i.test(url)) return;
+      const key = name.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ name, url, color: color || '#38bdf8' });
+    };
+
+    for (const link of (anime?.externalLinks || [])) {
+      const site = String(link.site || '');
+      const lowSite = site.toLowerCase();
+      const lowUrl = String(link.url || '').toLowerCase();
+      const matched = PLATFORM_CONFIG.find(p =>
+        p.aliases.some(a => lowSite.includes(a)) || p.domains.some(d => lowUrl.includes(d))
+      );
+      if (matched) addLink(matched.name, link.url, matched.color);
+    }
+
+    for (const s of (jikanStreaming || [])) {
+      const low = String(s.name || '').toLowerCase();
+      const matched = PLATFORM_CONFIG.find(p => p.aliases.some(a => low.includes(a)));
+      addLink(matched ? matched.name : s.name, s.url, matched?.color);
+    }
+    return out;
+  }
+
   function isFreeWithAds(anime, platforms) {
     const state = getState();
     const id = Number(anime?.id);
@@ -924,21 +1037,21 @@
     return list.some(p => p.freeWithAds);
   }
 
-  function classifyDub(anime, platforms) {
+  // Factual dub classifier: honors user override first, then checks real AniList
+  // English voice actors (characters.edges.voiceActors(language: ENGLISH)).
+  // Never guesses "Dubbed" solely from popularity.
+  function classifyDub(anime) {
     const state = getState();
     const id = Number(anime?.id);
     const ovr = id && (state.overrides[id] || state.watchlist[id]);
-    if (ovr?.dubOverride) return ovr.dubOverride;
+    if (ovr?.dubOverride) return ovr.dubOverride === 'Dubbed' ? 'EN Dub' : ovr.dubOverride;
 
-    const list = platforms || detectPlatforms(anime);
-    const hasDubPlatform = list.some(p => p.dubLikely);
-    const pop = Number(anime?.popularity || 0);
-    const status = anime?.status;
-
-    if (status === 'RELEASING' && hasDubPlatform && pop >= 18000) return 'Simuldub';
-    if (hasDubPlatform && pop >= 25000) return 'Dubbed';
-    if (list.some(p => p.id === 'netflix' || p.id === 'disney') && pop >= 8000) return 'Dubbed';
-    return 'Sub Only';
+    const edges = anime?.characters?.edges || [];
+    const hasEnVa = edges.some(e => Array.isArray(e?.voiceActors) && e.voiceActors.length > 0);
+    if (hasEnVa) {
+      return anime?.status === 'RELEASING' ? 'Simuldub' : 'EN Dub';
+    }
+    return 'Sub / No EN VA';
   }
 
   // --------------------------------------------------------------------------
@@ -947,6 +1060,7 @@
   const MEDIA_CARD_FIELDS = `
     id
     idMal
+    countryOfOrigin
     title { romaji english native }
     coverImage { large medium color }
     bannerImage
@@ -963,10 +1077,16 @@
     genres
     isAdult
     description(asHtml: false)
+    trailer { id site thumbnail }
     studios(isMain: true) { nodes { id name } }
     tags { name rank isMediaSpoiler isGeneralSpoiler }
     externalLinks { site url type }
     nextAiringEpisode { airingAt timeUntilAiring episode }
+    characters(perPage: 5, sort: [ROLE, FAVOURITES]) {
+      edges {
+        voiceActors(language: ENGLISH) { id }
+      }
+    }
     staff(perPage: 8, sort: RELEVANCE) {
       edges {
         role
@@ -1119,14 +1239,17 @@
 
     const matchedGenres = new Set();
     const matchedTags = new Set();
+    const explicitGenres = new Set();
+    const explicitTags = new Set();
     const layersUsed = [];
     let decadeRange = null;
 
-    // Decade detection (e.g. 90s, 1980s, 2000s, 70s)
-    const decMatch = lower.match(/\b(19[6-9]0|20[0-2]0|[6-9]0)s\b/);
+    // Decade detection (e.g. 90s, 1980s, 2000s, 00s, 70s)
+    const decMatch = lower.match(/\b(19[6-9]0|20[0-2]0|[6-9]0|00|10|20)s\b/);
     if (decMatch) {
       let yr = parseInt(decMatch[1], 10);
-      if (yr < 100) yr += 1900;
+      if (yr < 30) yr += 2000;
+      else if (yr < 100) yr += 1900;
       decadeRange = { start: yr * 10000, end: (yr + 9) * 10000 + 1231, label: `${yr}s` };
     }
 
@@ -1150,14 +1273,20 @@
     let layer1Hit = false;
     for (const candidate of ngrams) {
       if (genreMap.has(candidate)) {
-        matchedGenres.add(genreMap.get(candidate));
+        const g = genreMap.get(candidate);
+        matchedGenres.add(g);
+        explicitGenres.add(g);
         layer1Hit = true;
       }
       if (tagMap.has(candidate)) {
-        matchedTags.add(tagMap.get(candidate));
+        const t = tagMap.get(candidate);
+        matchedTags.add(t);
+        explicitTags.add(t);
         layer1Hit = true;
       } else if (tagSingularMap.has(candidate) && candidate.length > 3) {
-        matchedTags.add(tagSingularMap.get(candidate));
+        const t = tagSingularMap.get(candidate);
+        matchedTags.add(t);
+        explicitTags.add(t);
         layer1Hit = true;
       }
     }
@@ -1203,6 +1332,8 @@
       raw,
       genres: Array.from(matchedGenres),
       tags: Array.from(matchedTags),
+      explicitGenres: Array.from(explicitGenres),
+      explicitTags: Array.from(explicitTags),
       decadeRange,
       layersUsed
     };
@@ -1211,6 +1342,8 @@
   async function fetchVibeCandidates(parsed, { limit = 26, maxPopularity = null } = {}) {
     const genres = parsed.genres || [];
     const tags = parsed.tags || [];
+    const expTags = parsed.explicitTags?.length ? parsed.explicitTags : tags;
+    const expGenres = parsed.explicitGenres?.length ? parsed.explicitGenres : genres;
     const dec = parsed.decadeRange;
 
     const buildQuery = (useMinRank) => {
@@ -1218,18 +1351,24 @@
       const vars = {};
       const dateArgs = dec ? `, startDate_greater: ${dec.start}, startDate_lesser: ${dec.end}` : '';
       const popArgs = maxPopularity ? `, popularity_lesser: ${maxPopularity}` : '';
+      const minRankArg = useMinRank ? ', minimumTagRank: 55' : '';
 
-      if (tags.length > 0) {
-        vars.tags = tags.slice(0, 5);
-        const minRankArg = useMinRank ? ', minimumTagRank: 55' : '';
-        parts.push(`byTags: Page(page: 1, perPage: 24) { media(type: ANIME, isAdult: false, tag_in: $tags${minRankArg}${dateArgs}${popArgs}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${MEDIA_CARD_FIELDS} } }`);
+      // Prioritize explicit L1 tags first so tight prompts (e.g. "90s cyberpunk noir") aren't diluted
+      if (expTags.length > 0) {
+        vars.expTags = expTags.slice(0, 5);
+        parts.push(`byExpTags: Page(page: 1, perPage: 28) { media(type: ANIME, isAdult: false, tag_in: $expTags${minRankArg}${dateArgs}${popArgs}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${MEDIA_CARD_FIELDS} } }`);
       }
-      if (genres.length > 0) {
+      if (tags.length > expTags.length) {
+        vars.allTags = tags.slice(0, 6);
+        parts.push(`byAllTags: Page(page: 1, perPage: 24) { media(type: ANIME, isAdult: false, tag_in: $allTags${minRankArg}${dateArgs}${popArgs}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${MEDIA_CARD_FIELDS} } }`);
+      }
+      if (expTags.length > 0 && genres.length > 0) {
         vars.genres = genres.slice(0, 4);
-        parts.push(`byGenres: Page(page: 1, perPage: 24) { media(type: ANIME, isAdult: false, genre_in: $genres${dateArgs}${popArgs}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${MEDIA_CARD_FIELDS} } }`);
-      }
-      if (tags.length > 0 && genres.length > 0) {
-        parts.push(`combined: Page(page: 1, perPage: 20) { media(type: ANIME, isAdult: false, tag_in: $tags, genre_in: $genres${dateArgs}${popArgs}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${MEDIA_CARD_FIELDS} } }`);
+        parts.push(`combined: Page(page: 1, perPage: 24) { media(type: ANIME, isAdult: false, tag_in: $expTags, genre_in: $genres${minRankArg}${dateArgs}${popArgs}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${MEDIA_CARD_FIELDS} } }`);
+      } else if (expGenres.length > 0 && expTags.length === 0) {
+        // Only query by pure genres when user did not supply specific canonical tags
+        vars.genres = expGenres.slice(0, 4);
+        parts.push(`byGenres: Page(page: 1, perPage: 28) { media(type: ANIME, isAdult: false, genre_in: $genres${dateArgs}${popArgs}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${MEDIA_CARD_FIELDS} } }`);
       }
       if (parts.length === 0) {
         vars.search = parsed.raw || 'anime';
@@ -1237,7 +1376,8 @@
       }
 
       const varDefs = [];
-      if (vars.tags) varDefs.push('$tags: [String]');
+      if (vars.expTags) varDefs.push('$expTags: [String]');
+      if (vars.allTags) varDefs.push('$allTags: [String]');
       if (vars.genres) varDefs.push('$genres: [String]');
       if (vars.search) varDefs.push('$search: String');
       const header = varDefs.length ? `query (${varDefs.join(', ')})` : 'query';
@@ -1254,7 +1394,7 @@
       return Array.from(map.values());
     };
 
-    const cacheId = `vibe_${(parsed.raw || '').toLowerCase()}_${tags.join(',')}_${genres.join(',')}_${dec?.label || ''}_${maxPopularity || 'all'}`;
+    const cacheId = `vibe_v2_${(parsed.raw || '').toLowerCase()}_${expTags.join(',')}_${tags.join(',')}_${genres.join(',')}_${dec?.label || ''}_${maxPopularity || 'all'}`;
     let { query, vars } = buildQuery(true);
     let data = await anilistQuery(query, vars, { cacheKey: cacheId, ttl: TTL_DYNAMIC });
     let items = collectUnique(data);
@@ -1266,23 +1406,36 @@
       items = collectUnique(data);
     }
 
-    // Score & rank by exemplar tagRanks + genre alignment
-    const targetTags = new Set(tags.map(t => t.toLowerCase()));
-    const targetGenres = new Set(genres.map(g => g.toLowerCase()));
+    // Score & rank by explicit tag coverage + mood tag ranks + genre alignment
+    const expTagSet = new Set(expTags.map(t => t.toLowerCase()));
+    const moodTagSet = new Set(tags.map(t => t.toLowerCase()));
+    const expGenreSet = new Set(expGenres.map(g => g.toLowerCase()));
+    const moodGenreSet = new Set(genres.map(g => g.toLowerCase()));
 
     items.forEach(m => {
       let score = 0;
+      let explicitHits = 0;
       for (const t of (m.tags || [])) {
-        if (targetTags.has(t.name.toLowerCase())) {
-          score += (t.rank || 50) * 1.4;
+        const tl = t.name.toLowerCase();
+        if (expTagSet.has(tl)) {
+          score += (t.rank || 55) * 2.4;
+          explicitHits++;
+        } else if (moodTagSet.has(tl)) {
+          score += (t.rank || 50) * 0.9;
         }
       }
       for (const g of (m.genres || [])) {
-        if (targetGenres.has(g.toLowerCase())) {
-          score += 45;
+        const gl = g.toLowerCase();
+        if (expGenreSet.has(gl)) {
+          score += 65;
+          explicitHits++;
+        } else if (moodGenreSet.has(gl)) {
+          score += 22;
         }
       }
-      score += (m.averageScore || 65) * 0.45;
+      // Coverage multiplier: hitting multiple explicit concepts dominates single-tag overlap
+      if (explicitHits >= 2) score *= (1 + explicitHits * 0.35);
+      score += (m.averageScore || 65) * 0.35;
       m._vibeScore = score;
     });
 
@@ -1376,17 +1529,47 @@
     }
   }
 
-  async function fetchWikipediaSummary(title) {
+  function normalizeTitleKey(str) {
+    return String(str || '')
+      .toLowerCase()
+      .replace(/\(.*?\)/g, ' ')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\b(the|a|an|season|part|tv|anime|movie)\b/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function titlesMatch(expectedTitles, candidate) {
+    const cand = normalizeTitleKey(candidate);
+    if (!cand || cand.length < 2) return false;
+    const candWords = new Set(cand.split(' ').filter(w => w.length >= 2));
+    for (const rawExp of expectedTitles) {
+      const exp = normalizeTitleKey(rawExp);
+      if (!exp) continue;
+      if (cand === exp || cand.includes(exp) || exp.includes(cand)) return true;
+      const expWords = exp.split(' ').filter(w => w.length >= 2);
+      if (!expWords.length) continue;
+      let hits = 0;
+      for (const w of expWords) if (candWords.has(w)) hits++;
+      if (hits / Math.max(expWords.length, candWords.size) >= 0.55) return true;
+    }
+    return false;
+  }
+
+  async function fetchWikipediaSummary(title, altTitles = []) {
     if (!title) return null;
-    const cacheKey = `wiki_${title.toLowerCase()}`;
+    const cacheKey = `wiki_v2_${title.toLowerCase()}`;
     const cached = await cacheGet(cacheKey);
     if (cached) return cached;
+
+    const allTitles = [title, ...altTitles].filter(Boolean);
+    const ANIME_CONTEXT_RE = /\b(anime|manga|light novel|japanese animated|animated television series|animated film|original video animation|ova|ona|studio ghibli|kyoto animation|madhouse|mappa|toei animation|shonen|shounen|seinen|shoujo|josei|visual novel)\b/i;
 
     const trySummary = async (pageTitle) => {
       const data = await fetchJsonSafe(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(pageTitle)}`);
       if (data && data.extract && data.type !== 'disambiguation') {
-        const low = (data.description + ' ' + data.extract).toLowerCase();
-        if (/(anime|manga|japanese|animated|studio|film|series|television|light novel)/.test(low)) {
+        const text = `${data.description || ''} ${data.extract || ''}`;
+        if (ANIME_CONTEXT_RE.test(text) && titlesMatch(allTitles, data.title)) {
           return {
             title: data.title,
             extract: data.extract,
@@ -1397,10 +1580,12 @@
       return null;
     };
 
-    let result = await trySummary(title);
-    if (!result) result = await trySummary(`${title} (anime)`);
+    // Try anime-disambiguated titles FIRST to avoid hitting generic words like "Monster", "Bleach", "Orange"
+    let result = await trySummary(`${title} (anime)`);
+    if (!result) result = await trySummary(`${title} (manga)`);
+    if (!result) result = await trySummary(title);
     if (!result) {
-      const search = await fetchJsonSafe(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(title + ' anime')}&limit=3&format=json&origin=*`);
+      const search = await fetchJsonSafe(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(title + ' anime')}&limit=4&format=json&origin=*`);
       const candidates = Array.isArray(search?.[1]) ? search[1] : [];
       for (const c of candidates) {
         result = await trySummary(c);
@@ -1418,7 +1603,7 @@
     if (cached) return cached;
 
     const search = await fetchJsonSafe(`https://api.themoviedb.org/3/search/multi?api_key=${encodeURIComponent(tmdbKey)}&query=${encodeURIComponent(title)}`);
-    const hit = (search?.results || []).find(r => r.media_type === 'tv' || r.media_type === 'movie');
+    const hit = (search?.results || []).find(r => (r.media_type === 'tv' || r.media_type === 'movie') && titlesMatch([title], r.name || r.title || r.original_name || r.original_title));
     if (!hit) return null;
 
     const prov = await fetchJsonSafe(`https://api.themoviedb.org/3/${hit.media_type}/${hit.id}/watch/providers?api_key=${encodeURIComponent(tmdbKey)}`);
@@ -1441,12 +1626,13 @@
 
   async function fetchMultiSourceDetails(anime) {
     if (!anime || !anime.id) return {};
-    const cacheKey = `multisrc_${anime.id}`;
+    const cacheKey = `multisrc_v2_${anime.id}`;
     const tmdbKey = getState().settings.tmdbKey || '';
     const cached = await cacheGet(cacheKey);
     if (cached && (!tmdbKey || cached.tmdb !== undefined)) return cached;
 
     const title = getDisplayTitle(anime);
+    const altTitles = [anime.title?.english, anime.title?.romaji].filter(Boolean);
     const malId = anime.idMal;
 
     const jikanTask = malId
@@ -1467,21 +1653,31 @@
         })()
       : Promise.resolve(null);
 
+    // Kitsu: inspect top 5 and verify title + year match to avoid wrong seasons/unrelated hits
     const kitsuTask = (async () => {
-      const data = await fetchJsonSafe(`https://kitsu.io/api/edge/anime?filter[text]=${encodeURIComponent(title)}&page[limit]=1`);
-      const first = data?.data?.[0];
-      if (!first) return null;
+      const data = await fetchJsonSafe(`https://kitsu.io/api/edge/anime?filter[text]=${encodeURIComponent(title)}&page[limit]=5`);
+      const items = data?.data || [];
+      const best = items.find(item => {
+        const a = item.attributes || {};
+        const cands = [a.canonicalTitle, a.titles?.en, a.titles?.en_jp].filter(Boolean);
+        const yearOk = !anime.seasonYear || !a.startDate || Math.abs(Number(a.startDate.slice(0, 4)) - anime.seasonYear) <= 1;
+        return yearOk && cands.some(c => titlesMatch(altTitles, c));
+      }) || items.find(item => {
+        const a = item.attributes || {};
+        return [a.canonicalTitle, a.titles?.en, a.titles?.en_jp].some(c => titlesMatch(altTitles, c));
+      });
+      if (!best) return null;
       return {
-        rating: first.attributes?.averageRating,
-        slug: first.attributes?.slug,
-        ageRating: first.attributes?.ageRatingGuide,
-        url: first.attributes?.slug ? `https://kitsu.app/anime/${first.attributes.slug}` : ''
+        rating: best.attributes?.averageRating,
+        slug: best.attributes?.slug,
+        ageRating: best.attributes?.ageRatingGuide,
+        url: best.attributes?.slug ? `https://kitsu.app/anime/${best.attributes.slug}` : ''
       };
     })();
 
     const shikimoriTask = malId
       ? (async () => {
-          const data = await fetchJsonSafe(`https://shikimori.one/api/animes/${malId}`);
+          const data = await fetchJsonSafe(`https://shikimori.one/api/animes/${malId}`, 4000);
           if (!data || !data.id) return null;
           return {
             score: data.score,
@@ -1491,18 +1687,25 @@
         })()
       : Promise.resolve(null);
 
+    // TVMaze: use /search/shows and strictly require Animation/Japanese + title match
     const tvmazeTask = (async () => {
-      const data = await fetchJsonSafe(`https://api.tvmaze.com/singlesearch/shows?q=${encodeURIComponent(title)}`);
-      if (!data || !data.id) return null;
+      const results = await fetchJsonSafe(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(title)}`, 4500);
+      if (!Array.isArray(results)) return null;
+      const hit = results.map(r => r.show).find(s => {
+        if (!s || !s.name) return false;
+        const isAnim = s.type === 'Animation' || s.language === 'Japanese' || (s.genres || []).includes('Anime');
+        return isAnim && titlesMatch(altTitles, s.name);
+      });
+      if (!hit) return null;
       return {
-        rating: data.rating?.average,
-        network: data.network?.name || data.webChannel?.name || '',
-        status: data.status,
-        url: data.url
+        rating: hit.rating?.average,
+        network: hit.network?.name || hit.webChannel?.name || '',
+        status: hit.status,
+        url: hit.url
       };
     })();
 
-    const wikiTask = fetchWikipediaSummary(title);
+    const wikiTask = fetchWikipediaSummary(title, altTitles);
     const tmdbTask = tmdbKey ? fetchTmdbUsProviders(title, anime.seasonYear, tmdbKey) : Promise.resolve(undefined);
 
     const [jikan, kitsu, shikimori, tvmaze, wikipedia, tmdb] = await Promise.all([
@@ -1662,6 +1865,9 @@
 
     titleEl.textContent = title;
 
+    const ytTrailerId = anime.trailer?.site === 'youtube' ? anime.trailer.id : null;
+    const justWatchUrl = `https://www.justwatch.com/us/search?q=${encodeURIComponent(title)}`;
+
     bodyEl.innerHTML = `
       <div class="detail-hero">
         <img class="detail-cover" src="${escapeHtml(cover)}" alt="${escapeHtml(title)} cover">
@@ -1671,7 +1877,7 @@
             ${anime.format ? `<span class="badge badge-accent">${escapeHtml(anime.format)}</span>` : ''}
             ${anime.seasonYear ? `<span class="badge badge-muted">${escapeHtml(anime.season || '')} ${anime.seasonYear}</span>` : ''}
             ${anime.episodes ? `<span class="badge badge-muted">${anime.episodes} eps</span>` : ''}
-            <span class="badge badge-cyan">${escapeHtml(dubLabel)}</span>
+            <span class="badge badge-cyan" title="Verified from AniList English voice actors or user override">${escapeHtml(dubLabel)}</span>
             ${freeAds ? `<span class="badge badge-amber">Free w/ Ads</span>` : ''}
             <span class="badge badge-muted">Pop: ${formatCompactNumber(anime.popularity)}</span>
           </div>
@@ -1684,9 +1890,12 @@
           <div class="meta-row" style="margin-top:auto;">
             <a class="btn btn-primary btn-sm" href="./vibe-graph.html?seed=${anime.id}">Explore in Taste Graph</a>
             <a class="btn btn-cyan btn-sm" href="./eclectic-lab.html?tab=arithmetic&seed=${anime.id}">Send to Arithmetic</a>
+            ${ytTrailerId ? `<button type="button" class="btn btn-sm" id="af-toggle-trailer">▶ Watch Official Trailer</button>` : ''}
+            <a class="btn btn-sm" href="${justWatchUrl}" target="_blank" rel="noopener">JustWatch US ↗</a>
             <a class="btn btn-sm" href="https://anilist.co/anime/${anime.id}" target="_blank" rel="noopener">AniList ↗</a>
             ${anime.idMal ? `<a class="btn btn-sm" href="https://myanimelist.net/anime/${anime.idMal}" target="_blank" rel="noopener">MAL ↗</a>` : ''}
           </div>
+          <div id="af-trailer-slot"></div>
         </div>
       </div>
 
@@ -1748,6 +1957,21 @@
         </div>
       </div>
     `;
+
+    // Wire official trailer toggle if available
+    const trailerBtn = bodyEl.querySelector('#af-toggle-trailer');
+    if (trailerBtn && ytTrailerId) {
+      trailerBtn.addEventListener('click', () => {
+        const slot = bodyEl.querySelector('#af-trailer-slot');
+        if (slot.innerHTML) {
+          slot.innerHTML = '';
+          trailerBtn.textContent = '▶ Watch Official Trailer';
+        } else {
+          slot.innerHTML = `<div class="trailer-embed-wrap"><iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(ytTrailerId)}?autoplay=1" title="Official Trailer" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
+          trailerBtn.textContent = '✕ Hide Trailer';
+        }
+      });
+    }
 
     // Wire custom platform pills
     const customSet = new Set(ovr.customPlatforms || []);
@@ -1814,28 +2038,31 @@
         ...(multi.tmdb?.free || [])
       ];
       const mergedPlatforms = detectPlatforms(anime, extraStreamNames);
+      const streamLinks = getStreamingLinks(anime, multi.jikan?.streaming || []);
 
       area.innerHTML = `
         <div class="meta-row" style="margin-bottom:12px;">
-          <strong style="color:var(--text);">Detected Platforms:</strong>
-          ${mergedPlatforms.length
-            ? mergedPlatforms.map(p => `<span class="platform-tag" style="border-color:${p.color};color:${p.color};">${escapeHtml(p.name)}${p.freeWithAds ? ' (Free)' : ''}</span>`).join('')
-            : '<span class="badge badge-muted">None detected automatically — use overrides above</span>'}
+          <strong style="color:var(--text);">Where to Watch:</strong>
+          ${streamLinks.length
+            ? streamLinks.map(s => `<a class="stream-link-chip" href="${escapeHtml(s.url)}" target="_blank" rel="noopener" style="border-color:${s.color};color:${s.color};">${escapeHtml(s.name)} ↗</a>`).join('')
+            : mergedPlatforms.length
+              ? mergedPlatforms.map(p => `<span class="platform-tag" style="border-color:${p.color};color:${p.color};">${escapeHtml(p.name)}${p.freeWithAds ? ' (Free)' : ''}</span>`).join('')
+              : '<span class="badge badge-muted">No direct links listed — check JustWatch US above or set custom overrides</span>'}
         </div>
         <div class="grid-2" style="gap:10px;margin-bottom:12px;">
           <div class="panel" style="padding:10px;">
             <div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;">Jikan (MAL v4)</div>
             <div style="font-weight:700;color:var(--text);margin-top:3px;">
-              ${multi.jikan ? `Score ${multi.jikan.score ?? '—'} · Rank #${multi.jikan.rank ?? '—'}` : 'Unavailable'}
+              ${multi.jikan ? `Score ${multi.jikan.score ?? '—'} · Rank #${multi.jikan.rank ?? '—'}` : 'Not indexed / rate-limited'}
             </div>
             ${multi.jikan?.rating ? `<div style="font-size:11.5px;">${escapeHtml(multi.jikan.rating)}</div>` : ''}
           </div>
           <div class="panel" style="padding:10px;">
-            <div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;">Kitsu / Shikimori / TVMaze</div>
+            <div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;">Verified Cross-DB Scores</div>
             <div style="font-size:12.5px;color:var(--text);margin-top:3px;">
-              Kitsu: ${multi.kitsu?.rating ? multi.kitsu.rating + '%' : '—'} ·
+              Kitsu: ${multi.kitsu?.rating ? `<a href="${escapeHtml(multi.kitsu.url)}" target="_blank" rel="noopener">${multi.kitsu.rating}%</a>` : '—'} ·
               Shikimori: ${multi.shikimori?.score || '—'} ·
-              TVMaze: ${multi.tvmaze?.rating || '—'}
+              TVMaze: ${multi.tvmaze?.rating ? `<a href="${escapeHtml(multi.tvmaze.url)}" target="_blank" rel="noopener">${multi.tvmaze.rating}</a>` : '—'}
             </div>
             ${multi.tvmaze?.network ? `<div style="font-size:11.5px;">Network: ${escapeHtml(multi.tvmaze.network)}</div>` : ''}
           </div>
@@ -1905,9 +2132,12 @@
     gistPull,
     gistPush,
     gistCreateNew,
+    gistConnectAndSetup,
+    gistDisconnect,
     generateSyncCode,
     applySyncCode,
     detectPlatforms,
+    getStreamingLinks,
     isFreeWithAds,
     classifyDub,
     anilistQuery,

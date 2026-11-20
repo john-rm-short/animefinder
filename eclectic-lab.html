@@ -83,8 +83,11 @@
             <div style="font-size:12px;color:var(--text-muted);">Fetches up to 100 deduplicated anime credits in a single request and sorts them into 5 craft buckets.</div>
           </div>
         </div>
-        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-          <input id="staffSearchInput" type="search" class="input" style="flex:1;min-width:220px;" placeholder="Search any director, composer, writer, or animator...">
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;position:relative;">
+          <div style="position:relative;flex:1;min-width:220px;">
+            <input id="staffSearchInput" type="search" class="input input-full" placeholder="Search any director, composer, writer, or animator..." autocomplete="off">
+            <div id="staffDropdown" class="search-dropdown" role="listbox"></div>
+          </div>
           <button type="button" class="btn btn-primary btn-sm" id="searchStaffBtn">Inspect Creator</button>
         </div>
         <div class="pills-row" id="curatedAuteursBar"></div>
@@ -229,6 +232,7 @@
                 <span class="badge badge-muted">Pop ${AF.formatCompactNumber(anime.popularity)}</span>
                 ${anime.seasonYear ? `<span class="badge badge-muted">${anime.seasonYear}</span>` : ''}
               </div>
+              <button type="button" class="quick-wl-btn ${wl ? 'saved' : ''}" data-quick-wl="${anime.id}" title="${wl ? 'Saved in Watchlist (click to edit)' : 'Quick-add to Plan to Watch'}">${wl ? '✓ Saved' : '+ Save'}</button>
             </div>
             <div class="anime-card-body">
               <h3 class="anime-card-title">${AF.escapeHtml(title)}</h3>
@@ -248,6 +252,22 @@
           card.addEventListener('click', (ev) => { if (!ev.target.closest('a,button')) open(); });
           card.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } });
         });
+        container.querySelectorAll('[data-quick-wl]').forEach(btn => {
+          btn.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            const id = Number(btn.dataset.quickWl);
+            const item = byId.get(id);
+            const existing = AF.getState().watchlist[id];
+            if (existing) {
+              AF.openDetailModal(item || id);
+            } else if (item) {
+              AF.upsertWatchlistItem(item, { status: 'Plan to Watch' });
+              btn.classList.add('saved');
+              btn.textContent = '✓ Saved';
+              AF.toast(`Added "${AF.getDisplayTitle(item)}" to Plan to Watch!`, 'success', 2000);
+            }
+          });
+        });
       }
 
       // ----------------------------------------------------------------------
@@ -257,29 +277,45 @@
         'tone-reality': {
           left: 'Dark', right: 'Light', bottom: 'Grounded', top: 'Surreal',
           mapCoords(x, y) {
-            const tags = [];
-            const genres = [];
-            if (x <= -0.25) { tags.push('Tragedy', 'Psychological', 'Noir'); genres.push('Thriller', 'Horror'); }
-            if (x >= 0.25) { tags.push('Iyashikei', 'Coming of Age'); genres.push('Comedy', 'Slice of Life'); }
-            if (y <= -0.25) { tags.push('Seinen', 'Work', 'Historical'); genres.push('Drama', 'Sports'); }
-            if (y >= 0.25) { tags.push('Philosophy', 'Meta', 'Time Manipulation'); genres.push('Supernatural', 'Fantasy', 'Sci-Fi'); }
+            const tags = [], genres = [], avoidTags = [], avoidGenres = [];
+            if (x <= -0.25) {
+              tags.push('Tragedy', 'Psychological', 'Noir'); genres.push('Thriller', 'Horror');
+              avoidTags.push('Iyashikei', 'Cute Girls Doing Cute Things'); avoidGenres.push('Comedy');
+            }
+            if (x >= 0.25) {
+              tags.push('Iyashikei', 'Coming of Age'); genres.push('Comedy', 'Slice of Life');
+              avoidTags.push('Gore', 'Despair', 'Tragedy'); avoidGenres.push('Horror');
+            }
+            if (y <= -0.25) {
+              tags.push('Seinen', 'Work', 'Historical'); genres.push('Drama', 'Sports');
+              avoidGenres.push('Fantasy', 'Mecha');
+            }
+            if (y >= 0.25) {
+              tags.push('Philosophy', 'Meta', 'Time Manipulation'); genres.push('Supernatural', 'Fantasy', 'Sci-Fi');
+              avoidGenres.push('Sports');
+            }
             if (!tags.length && !genres.length) { tags.push('Philosophy', 'Ensemble Cast'); genres.push('Drama', 'Mystery'); }
-            return { tags, genres, maxPopularity: null, minPopularity: null };
+            return { tags, genres, avoidTags, avoidGenres, maxPopularity: null, minPopularity: null };
           }
         },
         'pacing-obscurity': {
           left: 'Slow-Burn', right: 'Frenetic', bottom: 'Mainstream', top: 'Deep Cut',
           mapCoords(x, y) {
-            const tags = [];
-            const genres = [];
-            if (x <= -0.25) { tags.push('Iyashikei', 'Philosophy', 'Episodic'); genres.push('Slice of Life', 'Drama'); }
-            if (x >= 0.25) { tags.push('Slapstick', 'Martial Arts', 'Super Power'); genres.push('Action', 'Adventure', 'Comedy'); }
+            const tags = [], genres = [], avoidTags = [], avoidGenres = [];
+            if (x <= -0.25) {
+              tags.push('Iyashikei', 'Philosophy', 'Episodic'); genres.push('Slice of Life', 'Drama');
+              avoidTags.push('Slapstick'); avoidGenres.push('Action');
+            }
+            if (x >= 0.25) {
+              tags.push('Slapstick', 'Martial Arts', 'Super Power'); genres.push('Action', 'Adventure', 'Comedy');
+              avoidTags.push('Iyashikei');
+            }
             if (!tags.length) { tags.push('Mystery', 'Coming of Age'); genres.push('Drama', 'Sci-Fi'); }
             let maxPopularity = null;
             let minPopularity = null;
             if (y >= 0.35) maxPopularity = y >= 0.7 ? 25000 : 65000;
             else if (y <= -0.35) minPopularity = y <= -0.7 ? 180000 : 85000;
-            return { tags, genres, maxPopularity, minPopularity };
+            return { tags, genres, avoidTags, avoidGenres, maxPopularity, minPopularity };
           }
         }
       };
@@ -347,17 +383,25 @@
 
           const targetTags = new Set(mapped.tags.map(t => t.toLowerCase()));
           const targetGenres = new Set(mapped.genres.map(g => g.toLowerCase()));
+          const avoidT = new Set((mapped.avoidTags || []).map(t => t.toLowerCase()));
+          const avoidG = new Set((mapped.avoidGenres || []).map(g => g.toLowerCase()));
 
           const scored = Array.from(allMap.values()).map(m => {
             let align = 0;
+            let hits = 0;
             for (const t of (m.tags || [])) {
-              if (targetTags.has(t.name.toLowerCase())) align += (t.rank || 50) * 1.1;
+              const tl = t.name.toLowerCase();
+              if (targetTags.has(tl)) { align += (t.rank || 50) * 1.2; hits++; }
+              if (avoidT.has(tl)) align -= (t.rank || 50) * 1.3;
             }
             for (const g of (m.genres || [])) {
-              if (targetGenres.has(g.toLowerCase())) align += 40;
+              const gl = g.toLowerCase();
+              if (targetGenres.has(gl)) { align += 44; hits++; }
+              if (avoidG.has(gl)) align -= 75;
             }
-            align += (m.averageScore || 60) * 0.35;
-            const pct = Math.min(99, Math.max(42, Math.round(align / 2.6)));
+            if (hits >= 2) align *= 1.25;
+            align += (m.averageScore || 60) * 0.3;
+            const pct = Math.min(99, Math.max(35, Math.round(align / 2.8)));
             return { media: m, align, pct };
           }).sort((a, b) => b.align - a.align).slice(0, 12);
 
@@ -458,10 +502,11 @@
 
       function classifyCraftRole(roleStr) {
         const r = String(roleStr || '').toLowerCase();
+        // Check specialized directors BEFORE generic "director" so Animation/Art/Sound Directors land in the right bucket
+        if (/(sound director|music|composer|sound|theme song|arrangement|piano|orchestra|insert song)/.test(r)) return 'Music / Composer';
+        if (/(animation director|art director|character design|key anim|in-between|color|mechanical|prop|layout|director of photography|cgi|background|design)/.test(r)) return 'Design & Animation';
+        if (/(script|series composition|screenplay|original creator|story|writer)/.test(r)) return 'Script & Series Comp';
         if (/(director|storyboard)/.test(r)) return 'Director';
-        if (/(music|composer|sound|theme song|arrangement|piano|orchestra)/.test(r)) return 'Music / Composer';
-        if (/(script|series composition|screenplay|original creator|story)/.test(r)) return 'Script & Series Comp';
-        if (/(character design|animation|key anim|art |color|mechanical|prop|layout)/.test(r)) return 'Design & Animation';
         return 'Other';
       }
 
@@ -475,12 +520,55 @@
         });
       });
 
+      // Live Staff Autocomplete Dropdown
+      const staffInp = document.getElementById('staffSearchInput');
+      const staffDrop = document.getElementById('staffDropdown');
+      let staffTimer = null;
+      staffInp.addEventListener('input', () => {
+        const q = staffInp.value.trim();
+        if (staffTimer) clearTimeout(staffTimer);
+        if (q.length < 2) { staffDrop.classList.remove('open'); return; }
+        staffTimer = setTimeout(async () => {
+          try {
+            const data = await AF.anilistQuery(
+              `query ($s: String) { Page(page: 1, perPage: 6) { staff(search: $s, sort: [SEARCH_MATCH, FAVOURITES_DESC]) { id name { full native } image { medium } primaryOccupations } } }`,
+              { s: q },
+              { cacheKey: `staff_search_${q.toLowerCase()}`, ttl: AF.TTL_STABLE }
+            );
+            const list = data?.Page?.staff || [];
+            if (!list.length) { staffDrop.classList.remove('open'); return; }
+            staffDrop.innerHTML = list.map(st => `
+              <div class="search-item" data-name="${AF.escapeHtml(st.name.full)}">
+                ${st.image?.medium ? `<img src="${AF.escapeHtml(st.image.medium)}" alt="" style="width:36px;height:48px;">` : ''}
+                <div>
+                  <div style="font-weight:700;font-size:13px;">${AF.escapeHtml(st.name.full)}</div>
+                  <div style="font-size:11px;color:var(--text-muted);">${AF.escapeHtml((st.primaryOccupations || []).slice(0, 3).join(' · ') || st.name.native || '')}</div>
+                </div>
+              </div>
+            `).join('');
+            staffDrop.classList.add('open');
+            staffDrop.querySelectorAll('.search-item').forEach(row => {
+              row.addEventListener('click', () => {
+                staffInp.value = row.dataset.name;
+                staffDrop.classList.remove('open');
+                loadAuteur(row.dataset.name);
+              });
+            });
+          } catch {}
+        }, 300);
+      });
+      document.addEventListener('click', (ev) => {
+        if (!ev.target.closest('#staffSearchInput') && !ev.target.closest('#staffDropdown')) staffDrop.classList.remove('open');
+      });
+
       document.getElementById('searchStaffBtn').addEventListener('click', () => {
-        const q = document.getElementById('staffSearchInput').value.trim();
+        staffDrop.classList.remove('open');
+        const q = staffInp.value.trim();
         if (q) loadAuteur(q);
       });
-      document.getElementById('staffSearchInput').addEventListener('keydown', (ev) => {
+      staffInp.addEventListener('keydown', (ev) => {
         if (ev.key === 'Enter') {
+          staffDrop.classList.remove('open');
           const q = ev.target.value.trim();
           if (q) loadAuteur(q);
         }
@@ -850,13 +938,26 @@
         const g = document.getElementById('eqAddGenre').value;
         if (g) { eqTerms.push({ type: 'genre', label: g, sign: -1 }); renderEquationBar(); solveEquation(); }
       });
+      function canonicalizeTag(input) {
+        if (!taxonomy?.tags?.length) return input.trim();
+        const low = input.trim().toLowerCase();
+        const exact = taxonomy.tags.find(t => t.name.toLowerCase() === low);
+        if (exact) return exact.name;
+        const partial = taxonomy.tags.find(t => t.name.toLowerCase().startsWith(low));
+        return partial ? partial.name : null;
+      }
+
       document.getElementById('eqAddTagPlus').addEventListener('click', () => {
-        const t = document.getElementById('eqAddTag').value.trim();
-        if (t) { eqTerms.push({ type: 'tag', label: t, sign: 1 }); document.getElementById('eqAddTag').value = ''; renderEquationBar(); solveEquation(); }
+        const raw = document.getElementById('eqAddTag').value.trim();
+        const t = canonicalizeTag(raw);
+        if (!t) return AF.toast(`"${raw}" is not a canonical AniList tag. Pick from the suggestions.`, 'warn');
+        eqTerms.push({ type: 'tag', label: t, sign: 1 }); document.getElementById('eqAddTag').value = ''; renderEquationBar(); solveEquation();
       });
       document.getElementById('eqAddTagMinus').addEventListener('click', () => {
-        const t = document.getElementById('eqAddTag').value.trim();
-        if (t) { eqTerms.push({ type: 'tag', label: t, sign: -1 }); document.getElementById('eqAddTag').value = ''; renderEquationBar(); solveEquation(); }
+        const raw = document.getElementById('eqAddTag').value.trim();
+        const t = canonicalizeTag(raw);
+        if (!t) return AF.toast(`"${raw}" is not a canonical AniList tag. Pick from the suggestions.`, 'warn');
+        eqTerms.push({ type: 'tag', label: t, sign: -1 }); document.getElementById('eqAddTag').value = ''; renderEquationBar(); solveEquation();
       });
       document.getElementById('resetDefaultEqBtn').addEventListener('click', loadDefaultPresetEquation);
       document.getElementById('solveEquationBtn').addEventListener('click', solveEquation);
@@ -876,14 +977,20 @@
       function redactSynopsis(anime) {
         let text = AF.stripHtml(anime.description || '');
         if (!text) return 'No synopsis available.';
+        // Strip metadata footers like "(Source: MAL Rewrite)" or "[Written by MAL Rewrite]"
+        text = text.replace(/\s*(\(Source:[^)]+\)|\[Written by[^\]]+\])\s*/gi, ' ').trim();
+
         const titles = [anime.title?.english, anime.title?.romaji, anime.title?.native].filter(Boolean);
         const tokens = new Set();
-        const ignore = new Set(['the','and','for','with','from','into','that','this','season','movie','part','ova','ona']);
+        const ignore = new Set(['the','and','for','with','from','into','that','this','season','movie','part','ova','ona','story','world','life','anime','series']);
 
         for (const t of titles) {
-          if (t.length >= 3) tokens.add(t);
+          if (t.length >= 2) tokens.add(t);
           t.split(/[^a-zA-Z0-9\u3040-\u30ff\u4e00-\u9faf]+/).forEach(w => {
-            if (w.length >= 4 && !ignore.has(w.toLowerCase())) tokens.add(w);
+            const isCjk = /[\u3040-\u30ff\u4e00-\u9faf]/.test(w);
+            if ((isCjk && w.length >= 2) || (w.length >= 4 && !ignore.has(w.toLowerCase()))) {
+              tokens.add(w);
+            }
           });
         }
 
@@ -891,7 +998,10 @@
         let safe = AF.escapeHtml(text);
         for (const tok of sorted) {
           const esc = AF.escapeHtml(tok).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const re = new RegExp(`\\b${esc}\\b`, 'gi');
+          const isAsciiWord = /^[a-zA-Z0-9]+$/.test(tok);
+          const re = isAsciiWord
+            ? new RegExp(`(?<![a-zA-Z0-9])${esc}(?![a-zA-Z0-9])`, 'gi')
+            : new RegExp(esc, 'gi');
           safe = safe.replace(re, '<span class="redacted-token">[REDACTED]</span>');
         }
         return safe;
@@ -905,7 +1015,7 @@
 
         if (refetch || !roulettePool.length) {
           stage.innerHTML = `<div class="empty-state"><span class="spinner"></span> Drawing blind premise candidates...</div>`;
-          const page = Math.floor(Math.random() * 4) + 1;
+          const page = Math.floor(Math.random() * 8) + 1;
           const query = `
             query ($page: Int ${genre ? ', $genre: String' : ''}) {
               Page(page: $page, perPage: 30) {

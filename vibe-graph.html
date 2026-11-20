@@ -484,6 +484,7 @@
         document.getElementById('graphCountBadge').textContent = `${vis.length} nodes · ${edges.length} edges`;
         renderNodeTable();
         if (selectedId) renderInspector(selectedId);
+        requestDraw();
       }
 
       // Deterministic Pure-JS 2D t-SNE directly from similarity matrix
@@ -598,6 +599,7 @@
           const radius = seedIds.has(a.id) ? 30 : 140 + (idx % 4) * 55;
           const img = new Image();
           img.referrerPolicy = 'no-referrer';
+          img.onload = () => requestDraw();
           img.src = AF.getCover(a);
           const node = {
             id: a.id,
@@ -627,9 +629,12 @@
         renderInspector(selectedId);
       }
 
+      let lastVibePrompt = '';
+
       async function runVibeSearch(promptText) {
         const q = String(promptText || '').trim();
         if (!q) return;
+        lastVibePrompt = q;
         document.getElementById('vibePromptInput').value = q;
         const readout = document.getElementById('vibeParsedReadout');
         readout.innerHTML = `<span class="spinner"></span> Resolving live AniList taxonomy for "${AF.escapeHtml(q)}"...`;
@@ -647,17 +652,20 @@
             ${parsed.tags.map(t => `<span class="badge badge-accent">#${AF.escapeHtml(t)}</span>`).join('')}
             ${parsed.genres.map(g => `<span class="badge badge-purple">${AF.escapeHtml(g)}</span>`).join('')}
             ${parsed.decadeRange ? `<span class="badge badge-amber">${parsed.decadeRange.label}</span>` : ''}
+            ${gemCeiling ? `<span class="badge badge-amber">Pop &lt; ${AF.formatCompactNumber(gemCeiling)}</span>` : ''}
             <span>(${candidates.length} titles mapped)</span>
           `;
 
           const seedSet = new Set(candidates.slice(0, 2).map(c => c.id));
           addAnimeNodes(candidates, { reset: true, seedIds: seedSet });
+          requestDraw();
         } catch (err) {
           readout.innerHTML = `<span style="color:var(--rose);">Vibe search failed: ${AF.escapeHtml(err.message)}</span>`;
         }
       }
 
       async function seedByAnimeId(animeId) {
+        lastVibePrompt = '';
         const readout = document.getElementById('vibeParsedReadout');
         readout.innerHTML = `<span class="spinner"></span> Fetching seed anime &amp; semantic neighborhood...`;
         try {
@@ -697,6 +705,7 @@
       }
 
       async function seedByWatchlist() {
+        lastVibePrompt = '';
         const wlItems = Object.values(AF.getState().watchlist || {});
         if (!wlItems.length) {
           AF.toast('Your Watchlist is empty! Add titles in Main Hub or import from AniList first.', 'warn');
@@ -862,7 +871,7 @@
           const btn = ev.currentTarget;
           btn.disabled = true;
           btn.textContent = 'Fetching Wiki...';
-          const wiki = await AF.fetchWikipediaSummary(title);
+          const wiki = await AF.fetchWikipediaSummary(title, [a.title?.english, a.title?.romaji]);
           if (wiki?.extract) {
             node.wikiText = wiki.extract;
             recomputeGraphSimilarity();
@@ -1035,7 +1044,14 @@
         simAlpha *= 0.992;
       }
 
+      function requestDraw() {
+        if (!animHandle) {
+          animHandle = requestAnimationFrame(drawGraph);
+        }
+      }
+
       function drawGraph() {
+        animHandle = null;
         const w = canvas.parentElement.clientWidth;
         const h = canvas.parentElement.clientHeight;
         ctx.clearRect(0, 0, w, h);
@@ -1113,16 +1129,23 @@
             ctx.fill();
           }
 
-          // Clipped cover artwork
+          // Clipped cover artwork (with monogram fallback while loading)
           ctx.save();
           ctx.beginPath();
           ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
           ctx.closePath();
-          ctx.fillStyle = '#0f172a';
+          ctx.fillStyle = n.anime.coverImage?.color || '#1e293b';
           ctx.fill();
           ctx.clip();
           if (n.img && n.img.complete && n.img.naturalWidth > 0) {
             ctx.drawImage(n.img, n.x - r, n.y - r, r * 2, r * 2);
+          } else {
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = '700 13px system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(AF.getDisplayTitle(n.anime).slice(0, 2).toUpperCase(), n.x, n.y);
+            ctx.textBaseline = 'alphabetic';
           }
           ctx.restore();
 
@@ -1154,7 +1177,11 @@
         }
 
         ctx.restore();
-        animHandle = requestAnimationFrame(drawGraph);
+
+        // Only keep animating while force layout is settling or user is dragging
+        if ((layoutMode === 'force' && simAlpha >= 0.01 && vis.length > 0) || dragState) {
+          animHandle = requestAnimationFrame(drawGraph);
+        }
       }
 
       // ----------------------------------------------------------------------
@@ -1185,6 +1212,7 @@
         } else {
           dragState = { mode: 'pan', startX: sx, startY: sy, camX: cam.x, camY: cam.y, moved: false };
         }
+        requestDraw();
       });
 
       canvas.addEventListener('pointermove', (ev) => {
@@ -1193,7 +1221,11 @@
         const sy = ev.clientY - rect.top;
         if (!dragState) {
           const hit = hitTestNode(sx, sy);
-          hoveredId = hit ? hit.id : null;
+          const nextHov = hit ? hit.id : null;
+          if (nextHov !== hoveredId) {
+            hoveredId = nextHov;
+            requestDraw();
+          }
           canvas.style.cursor = hit ? 'pointer' : 'grab';
           return;
         }
@@ -1211,15 +1243,17 @@
           cam.x = dragState.camX - dx / cam.zoom;
           cam.y = dragState.camY - dy / cam.zoom;
         }
+        requestDraw();
       });
 
-      canvas.addEventListener('pointerup', () => { dragState = null; });
+      canvas.addEventListener('pointerup', () => { dragState = null; requestDraw(); });
       canvas.addEventListener('dblclick', (ev) => {
         const rect = canvas.getBoundingClientRect();
         const hit = hitTestNode(ev.clientX - rect.left, ev.clientY - rect.top);
         if (hit) {
           hit.pinned = !hit.pinned;
           renderInspector(hit.id);
+          requestDraw();
         }
       });
 
@@ -1227,6 +1261,7 @@
         ev.preventDefault();
         const factor = ev.deltaY < 0 ? 1.12 : 0.89;
         cam.zoom = Math.max(0.25, Math.min(2.8, cam.zoom * factor));
+        requestDraw();
       }, { passive: false });
 
       // ----------------------------------------------------------------------
@@ -1282,6 +1317,7 @@
         document.getElementById('layoutForceBtn').classList.add('active');
         document.getElementById('layoutTsneBtn').classList.remove('active');
         simAlpha = 0.9;
+        requestDraw();
       });
 
       document.getElementById('layoutTsneBtn').addEventListener('click', () => {
@@ -1289,22 +1325,30 @@
         document.getElementById('layoutTsneBtn').classList.add('active');
         document.getElementById('layoutForceBtn').classList.remove('active');
         recomputeGraphSimilarity();
+        requestDraw();
       });
 
       document.querySelectorAll('.gem-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           gemCeiling = Number(btn.dataset.gem) || 0;
           document.querySelectorAll('.gem-btn').forEach(b => b.classList.toggle('active', b === btn));
-          recomputeGraphSimilarity();
-          fitToView();
+          if (lastVibePrompt) {
+            // Re-query AniList with popularity_lesser so hidden gems actually fill the graph!
+            runVibeSearch(lastVibePrompt);
+          } else {
+            recomputeGraphSimilarity();
+            fitToView();
+            requestDraw();
+          }
         });
       });
 
-      document.getElementById('fitViewBtn').addEventListener('click', fitToView);
+      document.getElementById('fitViewBtn').addEventListener('click', () => { fitToView(); requestDraw(); });
       document.getElementById('unpinAllBtn').addEventListener('click', () => {
         nodes.forEach(n => { n.pinned = false; });
         simAlpha = 0.7;
         if (selectedId) renderInspector(selectedId);
+        requestDraw();
       });
 
       document.getElementById('toggleTableBtn').addEventListener('click', (ev) => {
@@ -1319,11 +1363,12 @@
       AF.onStateChange(() => {
         if (selectedId) renderInspector(selectedId);
         renderNodeTable();
+        requestDraw();
       });
 
-      window.addEventListener('resize', resizeCanvas);
+      window.addEventListener('resize', () => { resizeCanvas(); requestDraw(); });
       resizeCanvas();
-      animHandle = requestAnimationFrame(drawGraph);
+      requestDraw();
 
       // Boot deep-link routing (?seed=, ?vibe=, ?mode=watchlist)
       const params = new URLSearchParams(window.location.search);
