@@ -492,10 +492,10 @@
 
         const bottomBadges = [];
         if (dubInfo.hasEnDub) {
-          if (dubInfo.isSimuldub && dubInfo.dubEp) {
-            bottomBadges.push(`<span class="badge badge-cyan" title="Same-day Simuldub release">Simuldub Ep ${dubInfo.dubEp}</span>`);
-          } else if (dubInfo.dubEp && dubInfo.dubLag > 0) {
-            bottomBadges.push(`<span class="badge badge-cyan" title="Staggered EN Dub (${dubInfo.dubLag} eps behind Sub) — editable in Details">EN Dub Ep ${dubInfo.dubEp} (−${dubInfo.dubLag})</span>`);
+          if (dubInfo.isSimuldub) {
+            bottomBadges.push(`<span class="badge badge-cyan" title="Same-day Simuldub release">${dubInfo.dubEp ? `Simuldub Ep ${dubInfo.dubEp}` : 'Simuldub'}</span>`);
+          } else if (dubInfo.dubLag > 0) {
+            bottomBadges.push(`<span class="badge badge-cyan" title="Staggered EN Dub (${dubInfo.dubLag} eps behind Sub) — editable in Details">${dubInfo.dubEp ? `EN Dub Ep ${dubInfo.dubEp} (−${dubInfo.dubLag})` : `Staggered Dub (−${dubInfo.dubLag})`}</span>`);
           } else if (anime.status === 'RELEASING') {
             bottomBadges.push(`<span class="badge badge-cyan" title="English cast confirmed — dub releases on a delayed schedule behind Sub. Open Details to set exact episode lag.">EN Dub · Delayed</span>`);
           } else {

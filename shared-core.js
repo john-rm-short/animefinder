@@ -1229,14 +1229,14 @@
     return verifiedDubMap;
   }
 
-  // Factual dub classifier: honors user override first, then verified EN VA check.
-  // Never assumes same-day "Simuldub" on releasing shows since most ongoing dubs are staggered behind sub broadcasts.
+  // Factual dub classifier: honors user override & dubLag first, then verified EN VA check.
+  // Never assumes same-day "Simuldub" on releasing shows unless dubLag === 0 or dubOverride === 'Simuldub'.
   function classifyDub(anime) {
     const state = getState();
     const id = Number(anime?.id);
     const ovr = id && (state.overrides[id] || state.watchlist[id]);
+    if (ovr && ovr.dubLag === 0 && ovr.dubOverride !== 'Sub Only') return 'Simuldub';
     if (ovr?.dubOverride) return ovr.dubOverride === 'Dubbed' ? 'EN Dub' : ovr.dubOverride;
-    if (ovr && ovr.dubLag === 0) return 'Simuldub';
     if (ovr && typeof ovr.dubLag === 'number' && ovr.dubLag > 0) return 'Staggered Dub';
 
     const langs = getDubLanguages(anime);
@@ -2229,7 +2229,7 @@
             ${sourceLabel ? `<span class="badge ${anime.source === 'ORIGINAL' ? 'badge-amber' : 'badge-purple'}">${anime.source === 'ORIGINAL' ? '★ Anime Original' : escapeHtml(sourceLabel)}</span>` : ''}
             ${anime.seasonYear ? `<span class="badge badge-muted">${escapeHtml(anime.season || '')} ${anime.seasonYear}</span>` : ''}
             ${anime.episodes ? `<span class="badge badge-muted">${anime.episodes === 1 ? '1 ep' : anime.episodes + ' eps'}${anime.duration ? ' · ' + anime.duration + 'm' : ''}</span>` : ''}
-            <span class="badge badge-cyan" title="Verified from AniList English voice actors or user override">${escapeHtml(dubLabel)}</span>
+            <span class="badge badge-cyan" id="af-modal-dub-badge" title="Verified from AniList English voice actors or user override">${escapeHtml(dubLabel)}</span>
             ${freeAds ? `<span class="badge badge-amber">Free w/ Ads</span>` : ''}
             <span class="badge badge-muted">Pop: ${formatCompactNumber(anime.popularity)}</span>
           </div>
@@ -2413,6 +2413,13 @@
       }
     };
 
+    const syncModalHeroDubBadge = () => {
+      const heroDubBadge = bodyEl.querySelector('#af-modal-dub-badge');
+      if (heroDubBadge) {
+        heroDubBadge.textContent = classifyDub(anime);
+      }
+    };
+
     const persistModalChangesNow = (mode = 'watchlist') => {
       if (modalAutoSaveTimer) {
         clearTimeout(modalAutoSaveTimer);
@@ -2429,6 +2436,7 @@
         updateOverrides(anime.id, fields);
         markAutoSavedBadge('✓ Overrides auto-saved');
       }
+      syncModalHeroDubBadge();
     };
 
     const scheduleModalAutoSave = (mode = 'watchlist', immediate = false) => {
@@ -2481,9 +2489,25 @@
     ['#af-wl-status', '#af-wl-rating'].forEach(sel => {
       bodyEl.querySelector(sel)?.addEventListener('change', () => scheduleModalAutoSave('watchlist', true));
     });
-    ['#af-wl-dub', '#af-wl-dubday'].forEach(sel => {
-      bodyEl.querySelector(sel)?.addEventListener('change', () => scheduleModalAutoSave('overrides', true));
-    });
+    const dubSelect = bodyEl.querySelector('#af-wl-dub');
+    const lagInput = bodyEl.querySelector('#af-wl-dublag');
+    const dubDaySelect = bodyEl.querySelector('#af-wl-dubday');
+
+    if (dubSelect) {
+      dubSelect.addEventListener('change', () => {
+        if (dubSelect.value === 'Simuldub' && lagInput) {
+          lagInput.value = '0';
+          if (dubDaySelect) dubDaySelect.value = '';
+        } else if (dubSelect.value === 'Sub Only' && lagInput) {
+          lagInput.value = '';
+          if (dubDaySelect) dubDaySelect.value = '';
+        }
+        scheduleModalAutoSave('overrides', true);
+      });
+    }
+    if (dubDaySelect) {
+      dubDaySelect.addEventListener('change', () => scheduleModalAutoSave('overrides', true));
+    }
     const progInput = bodyEl.querySelector('#af-wl-progress');
     if (progInput) {
       progInput.addEventListener('input', () => scheduleModalAutoSave('watchlist', false));
@@ -2494,10 +2518,22 @@
       notesInput.addEventListener('input', () => scheduleModalAutoSave('watchlist', false));
       notesInput.addEventListener('blur', () => { if (modalAutoSaveTimer) persistModalChangesNow('watchlist'); });
     }
-    const lagInput = bodyEl.querySelector('#af-wl-dublag');
     if (lagInput) {
-      lagInput.addEventListener('input', () => scheduleModalAutoSave('overrides', false));
-      lagInput.addEventListener('change', () => scheduleModalAutoSave('overrides', true));
+      const syncDubClassificationFromLag = (immediate) => {
+        const raw = lagInput.value.trim();
+        if (raw !== '') {
+          const n = Math.max(0, Number(raw));
+          if (n === 0) {
+            if (dubSelect) dubSelect.value = 'Simuldub';
+            if (dubDaySelect) dubDaySelect.value = '';
+          } else if (n > 0 && dubSelect && (dubSelect.value === '' || dubSelect.value === 'Simuldub' || dubSelect.value === 'Sub Only')) {
+            dubSelect.value = 'Staggered Dub';
+          }
+        }
+        scheduleModalAutoSave('overrides', immediate);
+      };
+      lagInput.addEventListener('input', () => syncDubClassificationFromLag(false));
+      lagInput.addEventListener('change', () => syncDubClassificationFromLag(true));
     }
 
     backdrop.querySelector('#af-wl-save').addEventListener('click', () => {
