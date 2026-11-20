@@ -6,7 +6,7 @@
   <title>AnimeFinder — Eclectic Discovery Lab</title>
   <meta name="description" content="Experimental anime discovery tools: 2D Vibe Map, Auteur & Staff Tree, Attribute Arithmetic, and Blind Premise Roulette.">
   <meta name="theme-color" content="#090d1a">
-  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="AnimeFinder">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
@@ -207,7 +207,7 @@
         if (!loadedTabs.has(tabName)) {
           loadedTabs.add(tabName);
           if (tabName === 'vibe-map') runQuadrantQuery();
-          if (tabName === 'auteur') loadAuteur('Shinichiro Watanabe');
+          if (tabName === 'auteur') loadAuteur('Shinichirou Watanabe');
           if (tabName === 'arithmetic') initArithmetic();
           if (tabName === 'roulette') rollRoulette();
         }
@@ -361,49 +361,66 @@
           mapped.maxPopularity ? `popularity_lesser: ${mapped.maxPopularity}` : '',
           mapped.minPopularity ? `popularity_greater: ${mapped.minPopularity}` : ''
         ].filter(Boolean).join(', ');
+        const popClause = popArgs ? ', ' + popArgs : '';
 
-        const query = `
-          query ($tags: [String], $genres: [String]) {
-            byTag: Page(page: 1, perPage: 25) {
-              media(type: ANIME, isAdult: false, tag_in: $tags ${popArgs ? ', ' + popArgs : ''}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${AF.MEDIA_CARD_FIELDS} }
-            }
-            byGenre: Page(page: 1, perPage: 25) {
-              media(type: ANIME, isAdult: false, genre_in: $genres ${popArgs ? ', ' + popArgs : ''}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${AF.MEDIA_CARD_FIELDS} }
-            }
-          }
-        `;
+        // AniList tag_in/genre_in use AND semantics — batch individual tag & genre aliases for true OR union in 1 request!
+        const parts = [];
+        const vars = {};
+        const varDefs = [];
+        mapped.tags.slice(0, 4).forEach((t, i) => {
+          vars[`t${i}`] = t;
+          varDefs.push(`$t${i}: String`);
+          parts.push(`t${i}: Page(page: 1, perPage: 16) { media(type: ANIME, isAdult: false, tag: $t${i}${popClause}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${AF.MEDIA_CARD_FIELDS} } }`);
+        });
+        mapped.genres.slice(0, 3).forEach((g, i) => {
+          vars[`g${i}`] = g;
+          varDefs.push(`$g${i}: String`);
+          parts.push(`g${i}: Page(page: 1, perPage: 16) { media(type: ANIME, isAdult: false, genre: $g${i}${popClause}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${AF.MEDIA_CARD_FIELDS} } }`);
+        });
+        const query = `query (${varDefs.join(', ')}) { ${parts.join('\n')} }`;
 
         try {
-          const cacheKey = `lab_quad_${axisMode}_${reticleX.toFixed(1)}_${reticleY.toFixed(1)}`;
-          const data = await AF.anilistQuery(query, { tags: mapped.tags, genres: mapped.genres }, { cacheKey, ttl: AF.TTL_DYNAMIC });
+          const cacheKey = `lab_quad_v2_${axisMode}_${reticleX.toFixed(1)}_${reticleY.toFixed(1)}`;
+          const data = await AF.anilistQuery(query, vars, { cacheKey, ttl: AF.TTL_DYNAMIC });
           const allMap = new Map();
-          [...(data?.byTag?.media || []), ...(data?.byGenre?.media || [])].forEach(m => {
-            if (m && !m.isAdult && !allMap.has(m.id)) allMap.set(m.id, m);
-          });
+          for (const bucket of Object.values(data || {})) {
+            for (const m of (bucket?.media || [])) {
+              if (m && !m.isAdult && !allMap.has(m.id)) allMap.set(m.id, m);
+            }
+          }
 
           const targetTags = new Set(mapped.tags.map(t => t.toLowerCase()));
           const targetGenres = new Set(mapped.genres.map(g => g.toLowerCase()));
           const avoidT = new Set((mapped.avoidTags || []).map(t => t.toLowerCase()));
           const avoidG = new Set((mapped.avoidGenres || []).map(g => g.toLowerCase()));
 
-          const scored = Array.from(allMap.values()).map(m => {
+          const rawScored = Array.from(allMap.values()).map(m => {
             let align = 0;
             let hits = 0;
             for (const t of (m.tags || [])) {
               const tl = t.name.toLowerCase();
-              if (targetTags.has(tl)) { align += (t.rank || 50) * 1.2; hits++; }
-              if (avoidT.has(tl)) align -= (t.rank || 50) * 1.3;
+              if (targetTags.has(tl)) { align += (t.rank || 50) * 1.25; hits++; }
+              if (avoidT.has(tl)) align -= (t.rank || 50) * 1.35;
             }
             for (const g of (m.genres || [])) {
               const gl = g.toLowerCase();
               if (targetGenres.has(gl)) { align += 44; hits++; }
               if (avoidG.has(gl)) align -= 75;
             }
-            if (hits >= 2) align *= 1.25;
-            align += (m.averageScore || 60) * 0.3;
-            const pct = Math.min(99, Math.max(35, Math.round(align / 2.8)));
-            return { media: m, align, pct };
+            if (hits >= 2) align *= (1 + Math.min(4, hits) * 0.16);
+            align += (m.averageScore || 60) * 0.28;
+            return { media: m, align };
           }).sort((a, b) => b.align - a.align).slice(0, 12);
+
+          // Differentiate % alignment across top 12 cleanly (range ~68% to 98%)
+          const topAlign = rawScored[0]?.align || 1;
+          const minAlign = rawScored[rawScored.length - 1]?.align || 0;
+          const span = Math.max(25, topAlign - minAlign);
+          const scored = rawScored.map((s, idx) => {
+            const norm = (s.align - minAlign) / span;
+            const pct = Math.min(98, Math.max(62, Math.round(68 + norm * 29 - idx * 0.4)));
+            return { ...s, pct };
+          });
 
           meta.textContent = `Top ${scored.length} vector-aligned titles for (${reticleX.toFixed(2)}, ${reticleY.toFixed(2)})`;
           grid.innerHTML = scored.length
@@ -478,7 +495,7 @@
       // MODULE 2: AUTEUR & STAFF TREE (8 Curated Creators + 100-Credit 5 Buckets)
       // ----------------------------------------------------------------------
       const CURATED_AUTEURS = [
-        'Shinichiro Watanabe',
+        'Shinichirou Watanabe',
         'Satoshi Kon',
         'Masaaki Yuasa',
         'Hayao Miyazaki',
@@ -582,35 +599,38 @@
         bucketsBar.innerHTML = '';
         grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><span class="spinner"></span> Fetching up to 100 anime credits for "${AF.escapeHtml(name)}"...</div>`;
 
+        // Use Page { staff(search: ...) } instead of Staff(search:) so romanization variants never throw HTTP 404
         const query = `
           query ($search: String) {
-            Staff(search: $search) {
-              id
-              name { full native }
-              image { large medium }
-              primaryOccupations
-              description(asHtml: false)
-              p1: staffMedia(page: 1, perPage: 50, type: ANIME, sort: [SCORE_DESC, POPULARITY_DESC]) {
-                edges { staffRole node { ${AF.MEDIA_CARD_FIELDS} } }
-              }
-              p2: staffMedia(page: 2, perPage: 50, type: ANIME, sort: [SCORE_DESC, POPULARITY_DESC]) {
-                edges { staffRole node { ${AF.MEDIA_CARD_FIELDS} } }
+            Page(page: 1, perPage: 1) {
+              staff(search: $search, sort: [SEARCH_MATCH, FAVOURITES_DESC]) {
+                id
+                name { full native }
+                image { large medium }
+                primaryOccupations
+                description(asHtml: false)
+                p1: staffMedia(page: 1, perPage: 50, type: ANIME, sort: [SCORE_DESC, POPULARITY_DESC]) {
+                  edges { staffRole node { ${AF.MEDIA_CARD_FIELDS} } }
+                }
+                p2: staffMedia(page: 2, perPage: 50, type: ANIME, sort: [SCORE_DESC, POPULARITY_DESC]) {
+                  edges { staffRole node { ${AF.MEDIA_CARD_FIELDS} } }
+                }
               }
             }
           }
         `;
         try {
           const data = await AF.anilistQuery(query, { search: name }, {
-            cacheKey: `lab_auteur_${name.toLowerCase()}`,
+            cacheKey: `lab_auteur_v2_${name.toLowerCase()}`,
             ttl: AF.TTL_STABLE
           });
-          const staff = data?.Staff;
+          const staff = data?.Page?.staff?.[0];
           if (!staff) {
             grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">Creator "${AF.escapeHtml(name)}" not found on AniList.</div>`;
             return;
           }
 
-          // Deduplicate up to 100 anime credits, merging roles per anime
+          // Deduplicate up to 100 anime credits, preserving per-bucket role labels!
           const creditMap = new Map();
           const allEdges = [...(staff.p1?.edges || []), ...(staff.p2?.edges || [])];
           for (const e of allEdges) {
@@ -619,11 +639,13 @@
             const role = e.staffRole || 'Staff';
             const bucket = classifyCraftRole(role);
             if (!creditMap.has(m.id)) {
-              creditMap.set(m.id, { media: m, roles: [role], buckets: new Set([bucket]) });
+              creditMap.set(m.id, { media: m, roles: [role], buckets: new Set([bucket]), rolesByBucket: { [bucket]: [role] } });
             } else {
               const rec = creditMap.get(m.id);
               if (!rec.roles.includes(role)) rec.roles.push(role);
               rec.buckets.add(bucket);
+              if (!rec.rolesByBucket[bucket]) rec.rolesByBucket[bucket] = [];
+              if (!rec.rolesByBucket[bucket].includes(role)) rec.rolesByBucket[bucket].push(role);
             }
           }
 
@@ -677,8 +699,17 @@
           ? currentAuteurCredits
           : currentAuteurCredits.filter(c => c.buckets.has(activeBucket));
 
+        const pickRole = (c) => {
+          if (activeBucket !== 'All Credits' && c.rolesByBucket?.[activeBucket]?.length) {
+            // Prefer exact "Director" over "Storyboard" inside Director bucket
+            const list = c.rolesByBucket[activeBucket];
+            return list.find(r => /^director$/i.test(r)) || list[0];
+          }
+          return c.roles.find(r => /^director$/i.test(r)) || c.roles[0];
+        };
+
         grid.innerHTML = filtered.length
-          ? filtered.map(c => renderLabCard(c.media, `<span class="badge badge-purple">${AF.escapeHtml(c.roles[0])}</span>`)).join('')
+          ? filtered.map(c => renderLabCard(c.media, `<span class="badge badge-purple">${AF.escapeHtml(pickRole(c))}</span>`)).join('')
           : `<div class="empty-state" style="grid-column:1/-1;">No credits in the "${AF.escapeHtml(activeBucket)}" craft bucket.</div>`;
         wireCards(grid, filtered.map(c => c.media));
       }
@@ -808,16 +839,17 @@
 
         const parts = [];
         const exclStr = exclArgs.length ? ', ' + exclArgs.join(', ') : '';
-        if (dna.posTags.length) {
-          vars.posTags = dna.posTags;
-          varDefs.push('$posTags: [String]');
-          parts.push(`t: Page(page: 1, perPage: 30) { media(type: ANIME, isAdult: false, tag_in: $posTags${exclStr}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${AF.MEDIA_CARD_FIELDS} } }`);
-        }
-        if (dna.posGenres.length) {
-          vars.posGenres = dna.posGenres;
-          varDefs.push('$posGenres: [String]');
-          parts.push(`g: Page(page: 1, perPage: 30) { media(type: ANIME, isAdult: false, genre_in: $posGenres${exclStr}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${AF.MEDIA_CARD_FIELDS} } }`);
-        }
+        // Use individual union aliases (AniList tag_in/genre_in are AND-semantics)
+        dna.posTags.slice(0, 4).forEach((t, i) => {
+          vars[`pt${i}`] = t;
+          varDefs.push(`$pt${i}: String`);
+          parts.push(`pt${i}: Page(page: 1, perPage: 16) { media(type: ANIME, isAdult: false, tag: $pt${i}${exclStr}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${AF.MEDIA_CARD_FIELDS} } }`);
+        });
+        dna.posGenres.slice(0, 3).forEach((g, i) => {
+          vars[`pg${i}`] = g;
+          varDefs.push(`$pg${i}: String`);
+          parts.push(`pg${i}: Page(page: 1, perPage: 16) { media(type: ANIME, isAdult: false, genre: $pg${i}${exclStr}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${AF.MEDIA_CARD_FIELDS} } }`);
+        });
         if (!parts.length) {
           parts.push(`base: Page(page: 1, perPage: 30) { media(type: ANIME, isAdult: false${exclStr}, sort: [SCORE_DESC]) { ${AF.MEDIA_CARD_FIELDS} } }`);
         }
@@ -839,21 +871,42 @@
           const negT = new Set(dna.negTags.map(x => x.toLowerCase()));
           const negG = new Set(dna.negGenres.map(x => x.toLowerCase()));
 
-          const ranked = Array.from(pool.values()).map(m => {
+          const allRanked = Array.from(pool.values()).map(m => {
             let score = 0;
+            let hitCount = 0;
             for (const t of (m.tags || [])) {
               const tl = t.name.toLowerCase();
-              if (posT.has(tl)) score += (t.rank || 50) * 1.25;
+              if (posT.has(tl)) { score += (t.rank || 50) * 1.25; hitCount++; }
               if (negT.has(tl)) score -= (t.rank || 50) * 1.8; // Negative penalty
             }
             for (const g of (m.genres || [])) {
               const gl = g.toLowerCase();
-              if (posG.has(gl)) score += 45;
+              if (posG.has(gl)) { score += 45; hitCount++; }
               if (negG.has(gl)) score -= 90;
             }
+            if (hitCount >= 3) score *= 1.18;
             score += (m.averageScore || 65) * 0.4;
             return { media: m, score };
-          }).sort((a, b) => b.score - a.score).slice(0, 18);
+          }).sort((a, b) => b.score - a.score);
+
+          // Deduplicate franchise recap/sequel clusters (max 1 entry per franchise stem)
+          const seenFranchise = new Set();
+          const ranked = [];
+          for (const item of allRanked) {
+            const stem = AF.getDisplayTitle(item.media)
+              .toLowerCase()
+              .split(/[:\-–—(]/)[0]
+              .replace(/\b(season|part|movie|the movie|ova|2nd|3rd|4th|ii|iii|iv)\b.*$/i, '')
+              .replace(/[^a-z0-9\s]/g, '')
+              .trim()
+              .split(/\s+/)
+              .slice(0, 3)
+              .join(' ');
+            if (stem.length >= 4 && seenFranchise.has(stem)) continue;
+            if (stem.length >= 4) seenFranchise.add(stem);
+            ranked.push(item);
+            if (ranked.length >= 18) break;
+          }
 
           grid.innerHTML = ranked.length
             ? ranked.map((r, i) => renderLabCard(r.media, `<span class="badge badge-emerald">#${i + 1} Fit</span>`)).join('')
@@ -1060,7 +1113,7 @@
                 <div class="meta-row">
                   ${(m.genres || []).slice(0, 3).map(g => `<span class="badge badge-purple">${AF.escapeHtml(g)}</span>`).join('')}
                   ${m.format ? `<span class="badge badge-muted">${AF.escapeHtml(m.format)}</span>` : ''}
-                  ${m.episodes ? `<span class="badge badge-muted">${m.episodes} eps</span>` : ''}
+                  ${m.episodes ? `<span class="badge badge-muted">${m.episodes === 1 ? '1 ep' : m.episodes + ' eps'}</span>` : ''}
                 </div>
               </div>
               <p style="font-size:15px;line-height:1.7;color:#e2e8f0;margin:0 0 20px;white-space:pre-line;">
@@ -1075,6 +1128,7 @@
           `;
         } else {
           const title = AF.getDisplayTitle(m);
+          const cleanDesc = AF.stripHtml(m.description || '').replace(/\s*(\(Source:[^)]+\)|\[Written by[^\]]+\])\s*/gi, ' ').trim();
           stage.innerHTML = `
             <div class="roulette-card">
               <div class="detail-hero">
@@ -1090,8 +1144,8 @@
                   <div style="font-size:12.5px;color:var(--text-muted);">
                     ${AF.escapeHtml((m.studios?.nodes || []).map(s => s.name).join(', ') || 'Unknown Studio')} · ${AF.escapeHtml((m.genres || []).join(', '))}
                   </div>
-                  <p style="margin:0;font-size:13.5px;color:#cbd5e1;white-space:pre-line;max-height:190px;overflow-y:auto;">
-                    ${AF.escapeHtml(AF.stripHtml(m.description))}
+                  <p style="margin:0;font-size:13.5px;color:#cbd5e1;white-space:pre-line;max-height:195px;overflow-y:auto;padding-bottom:10px;line-height:1.55;">
+                    ${AF.escapeHtml(cleanDesc)}
                   </p>
                   <div class="meta-row" style="margin-top:auto;">
                     <button type="button" class="btn btn-emerald btn-sm" id="blindSaveBtn">${wl ? '✓ In Watchlist (' + AF.escapeHtml(wl.status) + ')' : '+ Save to Watchlist'}</button>

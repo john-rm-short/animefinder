@@ -72,6 +72,10 @@ button {
   outline-offset: 2px;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -389,6 +393,33 @@ button {
 .badge-cyan { background: rgba(56, 189, 248, 0.18); color: #bae6fd; border: 1px solid rgba(56, 189, 248, 0.35); }
 .badge-purple { background: rgba(192, 132, 252, 0.18); color: #e9d5ff; border: 1px solid rgba(192, 132, 252, 0.35); }
 .badge-muted { background: rgba(148, 163, 184, 0.14); color: var(--text-muted); border: 1px solid rgba(148, 163, 184, 0.2); }
+
+/* High-contrast opaque dark pill backing for badges overlaid on bright cover art */
+.anime-card-overlay-top .badge,
+.anime-card-overlay-bottom .badge {
+  background: rgba(9, 13, 26, 0.9);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+.anime-card-overlay-top .badge-accent,
+.anime-card-overlay-bottom .badge-accent { color: #e0e7ff; border-color: rgba(129, 140, 248, 0.75); }
+.anime-card-overlay-top .badge-emerald,
+.anime-card-overlay-bottom .badge-emerald { color: #6ee7b7; border-color: rgba(52, 211, 153, 0.75); }
+.anime-card-overlay-top .badge-amber,
+.anime-card-overlay-bottom .badge-amber { color: #fde047; border-color: rgba(251, 191, 36, 0.75); }
+.anime-card-overlay-top .badge-rose,
+.anime-card-overlay-bottom .badge-rose { color: #fda4af; border-color: rgba(251, 113, 133, 0.8); }
+.anime-card-overlay-top .badge-cyan,
+.anime-card-overlay-bottom .badge-cyan { color: #7dd3fc; border-color: rgba(56, 189, 248, 0.75); }
+.anime-card-overlay-top .badge-purple,
+.anime-card-overlay-bottom .badge-purple { color: #e9d5ff; border-color: rgba(192, 132, 252, 0.75); }
+.anime-card-overlay-top .badge-muted,
+.anime-card-overlay-bottom .badge-muted { color: #e2e8f0; border-color: rgba(148, 163, 184, 0.45); }
+
+.schedule-item .badge {
+  white-space: nowrap;
+}
 
 /* Search Bar */
 .global-search-wrap {

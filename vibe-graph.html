@@ -6,7 +6,7 @@
   <title>AnimeFinder — Vibe &amp; Taste Graph</title>
   <meta name="description" content="Seedless live-taxonomy Vibe Search, Force & Pure-JS t-SNE Taste Graph, 5-slider DNA weights, and optional in-browser MiniLM neural embeddings.">
   <meta name="theme-color" content="#090d1a">
-  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="AnimeFinder">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
@@ -807,7 +807,7 @@
             <button type="button" class="btn btn-xs" id="insFullModalBtn">Full Details</button>
           </div>
 
-          <p style="margin:0;font-size:12.5px;color:#cbd5e1;max-height:110px;overflow-y:auto;">
+          <p style="margin:0;font-size:12.5px;color:#cbd5e1;max-height:118px;overflow-y:auto;padding-bottom:10px;line-height:1.55;">
             ${AF.escapeHtml(AF.stripHtml(a.description) || 'No synopsis available.')}
           </p>
 
@@ -1054,7 +1054,17 @@
         animHandle = null;
         const w = canvas.parentElement.clientWidth;
         const h = canvas.parentElement.clientHeight;
-        ctx.clearRect(0, 0, w, h);
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        // Always sync backing canvas size & clear full pixel buffer to prevent stale ghost artifacts
+        const targetW = Math.max(1, Math.floor(w * dpr));
+        const targetH = Math.max(1, Math.floor(h * dpr));
+        if (canvas.width !== targetW || canvas.height !== targetH) {
+          canvas.width = targetW;
+          canvas.height = targetH;
+        }
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         const vis = getVisibleNodes();
         stepForce(vis);
@@ -1367,6 +1377,9 @@
       });
 
       window.addEventListener('resize', () => { resizeCanvas(); requestDraw(); });
+      if (typeof ResizeObserver !== 'undefined') {
+        new ResizeObserver(() => { resizeCanvas(); requestDraw(); }).observe(canvas.parentElement);
+      }
       resizeCanvas();
       requestDraw();
 

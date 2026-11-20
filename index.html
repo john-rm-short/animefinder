@@ -6,7 +6,7 @@
   <title>AnimeFinder — Main Hub &amp; Daily Utility</title>
   <meta name="description" content="Zero-build static anime discovery, live releases, 7-day Mon–Sun schedule, personal watchlist, radar, and studio/year archives.">
   <meta name="theme-color" content="#090d1a">
-  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="AnimeFinder">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
@@ -143,16 +143,16 @@
             </div>
           </div>
 
-          <div class="form-grid" style="margin-bottom:10px;">
+          <form onsubmit="return false;" class="form-grid" style="margin-bottom:10px;">
             <div class="form-field">
               <label for="gistTokenInput">GitHub Personal Access Token (<code>gist</code> scope only)</label>
-              <input id="gistTokenInput" type="password" class="input input-full" placeholder="ghp_... or github_pat_...">
+              <input id="gistTokenInput" type="password" autocomplete="off" class="input input-full" placeholder="ghp_... or github_pat_...">
             </div>
             <div class="form-field">
               <label for="gistIdInput">Private Gist ID (auto-filled on Connect)</label>
-              <input id="gistIdInput" type="text" class="input input-full" placeholder="Auto-discovered or created automatically">
+              <input id="gistIdInput" type="text" autocomplete="off" class="input input-full" placeholder="Auto-discovered or created automatically">
             </div>
-          </div>
+          </form>
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-muted);margin-bottom:12px;cursor:pointer;">
             <input type="checkbox" id="gistAutoSyncCheck" checked> Enable auto-pull on boot &amp; 1.5s debounced auto-push across all 3 pages
           </label>
@@ -167,24 +167,26 @@
         </div>
 
         <!-- AniList Username Importer (P2) & TMDB Key -->
-        <div class="panel">
+        <div class="panel" style="grid-column: 1 / -1;">
           <div class="panel-header">
             <h3 class="panel-title">AniList Importer, TMDB &amp; Cache</h3>
             <span class="badge badge-purple">P2 Ready</span>
           </div>
-          <div class="form-field" style="margin-bottom:14px;">
-            <label for="anilistImportUser">Read-Only AniList Username Import (<code>MediaListCollection</code>)</label>
-            <div style="display:flex;gap:8px;">
-              <input id="anilistImportUser" type="text" class="input input-full" placeholder="e.g. your public AniList username">
-              <button type="button" class="btn btn-cyan btn-sm" id="importAnilistBtn">Import Watchlist</button>
-            </div>
-          </div>
-          <div class="form-field" style="margin-bottom:14px;">
-            <label for="tmdbKeyInput">Optional TMDB API Key (US JustWatch Providers)</label>
-            <div style="display:flex;gap:8px;">
-              <input id="tmdbKeyInput" type="password" class="input input-full" placeholder="TMDB v3 API key (stored locally only)">
-              <button type="button" class="btn btn-sm" id="saveTmdbKeyBtn">Save Key</button>
-            </div>
+          <div class="grid-2" style="margin-bottom:12px;">
+            <form onsubmit="return false;" class="form-field">
+              <label for="anilistImportUser">Read-Only AniList Username Import (<code>MediaListCollection</code>)</label>
+              <div style="display:flex;gap:8px;">
+                <input id="anilistImportUser" type="text" class="input input-full" placeholder="e.g. your public AniList username">
+                <button type="button" class="btn btn-cyan btn-sm" id="importAnilistBtn">Import Watchlist</button>
+              </div>
+            </form>
+            <form onsubmit="return false;" class="form-field">
+              <label for="tmdbKeyInput">Optional TMDB API Key (US JustWatch Providers)</label>
+              <div style="display:flex;gap:8px;">
+                <input id="tmdbKeyInput" type="password" autocomplete="off" class="input input-full" placeholder="TMDB v3 API key (stored locally only)">
+                <button type="button" class="btn btn-sm" id="saveTmdbKeyBtn">Save Key</button>
+              </div>
+            </form>
           </div>
           <div class="divider"></div>
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
@@ -644,6 +646,10 @@
 
           releasesCache = Array.from(mergedMap.values());
           renderReleasesGrid();
+          // Verify real EN voice actors via batched root Media(id) aliases (cached 24h in IndexedDB)
+          AF.verifyDubStatusBatch(releasesCache).then(() => {
+            if (activeTab === 'releases') renderReleasesGrid();
+          });
         } catch (err) {
           meta.textContent = '';
           grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">Failed to load releases: ${AF.escapeHtml(err.message)}</div>`;
@@ -835,7 +841,7 @@
                         <div class="schedule-item-title">${AF.escapeHtml(AF.getDisplayTitle(m))}</div>
                         <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">Ep ${s.episode} · ${timeStr}</div>
                         <div style="display:flex;flex-wrap:wrap;gap:4px;">
-                          <span class="badge ${aired ? 'badge-emerald' : 'badge-amber'}">${aired ? 'Aired · ' + rel : rel}</span>
+                          <span class="badge ${aired ? 'badge-emerald' : 'badge-amber'}">${aired ? '✓ ' + rel : rel}</span>
                           ${inWl ? `<span class="badge badge-accent">★ Saved</span>` : ''}
                         </div>
                       </div>

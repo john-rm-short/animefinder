@@ -162,6 +162,10 @@
     return String(html)
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<[^>]+>/g, '')
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '$1')
+      .replace(/__(.*?)__/g, '$1')
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/~!([\s\S]*?)!~/g, '$1')
       .replace(/&quot;/g, '"')
       .replace(/&#039;|&apos;/g, "'")
       .replace(/&amp;/g, '&')
@@ -1037,17 +1041,72 @@
     return list.some(p => p.freeWithAds);
   }
 
-  // Factual dub classifier: honors user override first, then checks real AniList
-  // English voice actors (characters.edges.voiceActors(language: ENGLISH)).
-  // Never guesses "Dubbed" solely from popularity.
+  // Verified EN Dub cache (in-memory + 24h IndexedDB).
+  // AniList returns voiceActors=null inside batched Page{media} queries, so we
+  // batch top-level aliased Media(id: ...) root queries to get 100% factual EN VA data!
+  const verifiedDubMap = new Map(); // animeId -> boolean
+
+  async function verifyDubStatusBatch(animeList) {
+    const ids = Array.from(new Set(
+      (animeList || []).map(a => Number(a?.id || a)).filter(id => id > 0)
+    ));
+    if (!ids.length) return verifiedDubMap;
+
+    const toFetch = [];
+    for (const id of ids) {
+      if (verifiedDubMap.has(id)) continue;
+      const cached = await cacheGet(`dub_en_v1_${id}`);
+      if (cached && typeof cached.hasEnDub === 'boolean') {
+        verifiedDubMap.set(id, cached.hasEnDub);
+      } else {
+        toFetch.push(id);
+      }
+    }
+
+    // Batch up to 24 root Media(id: ...) aliases per GraphQL request (AniList returns populated voiceActors on root Media!)
+    const chunkSize = 24;
+    for (let start = 0; start < toFetch.length; start += chunkSize) {
+      const slice = toFetch.slice(start, start + chunkSize);
+      const aliases = slice.map((id, idx) => `
+        m${idx}: Media(id: ${id}, type: ANIME) {
+          id
+          characters(perPage: 4, sort: [ROLE, FAVOURITES]) {
+            edges {
+              voiceActors(language: ENGLISH) { id }
+            }
+          }
+        }
+      `).join('\n');
+      try {
+        const data = await anilistQuery(`query { ${aliases} }`);
+        for (const m of Object.values(data || {})) {
+          if (!m || !m.id) continue;
+          const edges = m.characters?.edges || [];
+          const hasEnDub = edges.some(e => Array.isArray(e?.voiceActors) && e.voiceActors.length > 0);
+          verifiedDubMap.set(m.id, hasEnDub);
+          await cacheSet(`dub_en_v1_${m.id}`, { hasEnDub }, TTL_STABLE);
+        }
+      } catch (err) {
+        console.warn('Batch EN dub verification warning:', err.message);
+      }
+    }
+    return verifiedDubMap;
+  }
+
+  // Factual dub classifier: honors user override first, then verified root-Media EN VA check
   function classifyDub(anime) {
     const state = getState();
     const id = Number(anime?.id);
     const ovr = id && (state.overrides[id] || state.watchlist[id]);
     if (ovr?.dubOverride) return ovr.dubOverride === 'Dubbed' ? 'EN Dub' : ovr.dubOverride;
 
-    const edges = anime?.characters?.edges || [];
-    const hasEnVa = edges.some(e => Array.isArray(e?.voiceActors) && e.voiceActors.length > 0);
+    let hasEnVa = false;
+    if (id && verifiedDubMap.has(id)) {
+      hasEnVa = verifiedDubMap.get(id);
+    } else {
+      const edges = anime?.characters?.edges || [];
+      hasEnVa = edges.some(e => Array.isArray(e?.voiceActors) && e.voiceActors.length > 0);
+    }
     if (hasEnVa) {
       return anime?.status === 'RELEASING' ? 'Simuldub' : 'EN Dub';
     }
@@ -1082,11 +1141,6 @@
     tags { name rank isMediaSpoiler isGeneralSpoiler }
     externalLinks { site url type }
     nextAiringEpisode { airingAt timeUntilAiring episode }
-    characters(perPage: 5, sort: [ROLE, FAVOURITES]) {
-      edges {
-        voiceActors(language: ENGLISH) { id }
-      }
-    }
     staff(perPage: 8, sort: RELEVANCE) {
       edges {
         role
@@ -1346,40 +1400,47 @@
     const expGenres = parsed.explicitGenres?.length ? parsed.explicitGenres : genres;
     const dec = parsed.decadeRange;
 
+    // IMPORTANT: On AniList GraphQL, tag_in & genre_in use AND (intersection) semantics!
+    // We batch pairwise intersections + individual tag/genre union aliases in ONE request.
     const buildQuery = (useMinRank) => {
       const parts = [];
       const vars = {};
+      const varDefs = [];
       const dateArgs = dec ? `, startDate_greater: ${dec.start}, startDate_lesser: ${dec.end}` : '';
       const popArgs = maxPopularity ? `, popularity_lesser: ${maxPopularity}` : '';
       const minRankArg = useMinRank ? ', minimumTagRank: 55' : '';
 
-      // Prioritize explicit L1 tags first so tight prompts (e.g. "90s cyberpunk noir") aren't diluted
-      if (expTags.length > 0) {
-        vars.expTags = expTags.slice(0, 5);
-        parts.push(`byExpTags: Page(page: 1, perPage: 28) { media(type: ANIME, isAdult: false, tag_in: $expTags${minRankArg}${dateArgs}${popArgs}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${MEDIA_CARD_FIELDS} } }`);
+      if (expTags.length >= 2) {
+        vars.pairTags = expTags.slice(0, 2);
+        varDefs.push('$pairTags: [String]');
+        parts.push(`pair: Page(page: 1, perPage: 20) { media(type: ANIME, isAdult: false, tag_in: $pairTags${minRankArg}${dateArgs}${popArgs}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${MEDIA_CARD_FIELDS} } }`);
       }
-      if (tags.length > expTags.length) {
-        vars.allTags = tags.slice(0, 6);
-        parts.push(`byAllTags: Page(page: 1, perPage: 24) { media(type: ANIME, isAdult: false, tag_in: $allTags${minRankArg}${dateArgs}${popArgs}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${MEDIA_CARD_FIELDS} } }`);
+
+      // Query each primary tag individually for OR union (up to 4 tags)
+      const unionTags = [...new Set([...expTags, ...tags])].slice(0, 4);
+      unionTags.forEach((tagName, idx) => {
+        const vName = `t${idx}`;
+        vars[vName] = tagName;
+        varDefs.push(`$${vName}: String`);
+        parts.push(`tag_${idx}: Page(page: 1, perPage: 16) { media(type: ANIME, isAdult: false, tag: $${vName}${minRankArg}${dateArgs}${popArgs}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${MEDIA_CARD_FIELDS} } }`);
+      });
+
+      // Query genres individually only when no explicit tags matched (or as supplemental union when tags are few)
+      if (expGenres.length > 0 && expTags.length < 2) {
+        expGenres.slice(0, 3).forEach((gName, idx) => {
+          const vName = `g${idx}`;
+          vars[vName] = gName;
+          varDefs.push(`$${vName}: String`);
+          parts.push(`gen_${idx}: Page(page: 1, perPage: 16) { media(type: ANIME, isAdult: false, genre: $${vName}${dateArgs}${popArgs}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${MEDIA_CARD_FIELDS} } }`);
+        });
       }
-      if (expTags.length > 0 && genres.length > 0) {
-        vars.genres = genres.slice(0, 4);
-        parts.push(`combined: Page(page: 1, perPage: 24) { media(type: ANIME, isAdult: false, tag_in: $expTags, genre_in: $genres${minRankArg}${dateArgs}${popArgs}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${MEDIA_CARD_FIELDS} } }`);
-      } else if (expGenres.length > 0 && expTags.length === 0) {
-        // Only query by pure genres when user did not supply specific canonical tags
-        vars.genres = expGenres.slice(0, 4);
-        parts.push(`byGenres: Page(page: 1, perPage: 28) { media(type: ANIME, isAdult: false, genre_in: $genres${dateArgs}${popArgs}, sort: [SCORE_DESC, POPULARITY_DESC]) { ${MEDIA_CARD_FIELDS} } }`);
-      }
+
       if (parts.length === 0) {
         vars.search = parsed.raw || 'anime';
+        varDefs.push('$search: String');
         parts.push(`fallback: Page(page: 1, perPage: 24) { media(type: ANIME, isAdult: false, search: $search${dateArgs}${popArgs}, sort: [SEARCH_MATCH, SCORE_DESC]) { ${MEDIA_CARD_FIELDS} } }`);
       }
 
-      const varDefs = [];
-      if (vars.expTags) varDefs.push('$expTags: [String]');
-      if (vars.allTags) varDefs.push('$allTags: [String]');
-      if (vars.genres) varDefs.push('$genres: [String]');
-      if (vars.search) varDefs.push('$search: String');
       const header = varDefs.length ? `query (${varDefs.join(', ')})` : 'query';
       return { query: `${header} { ${parts.join('\n')} }`, vars };
     };
@@ -1394,7 +1455,7 @@
       return Array.from(map.values());
     };
 
-    const cacheId = `vibe_v2_${(parsed.raw || '').toLowerCase()}_${expTags.join(',')}_${tags.join(',')}_${genres.join(',')}_${dec?.label || ''}_${maxPopularity || 'all'}`;
+    const cacheId = `vibe_v3_${(parsed.raw || '').toLowerCase()}_${expTags.join(',')}_${tags.join(',')}_${genres.join(',')}_${dec?.label || ''}_${maxPopularity || 'all'}`;
     let { query, vars } = buildQuery(true);
     let data = await anilistQuery(query, vars, { cacheKey: cacheId, ttl: TTL_DYNAMIC });
     let items = collectUnique(data);
@@ -1434,7 +1495,7 @@
         }
       }
       // Coverage multiplier: hitting multiple explicit concepts dominates single-tag overlap
-      if (explicitHits >= 2) score *= (1 + explicitHits * 0.35);
+      if (explicitHits >= 2) score *= (1 + explicitHits * 0.45);
       score += (m.averageScore || 65) * 0.35;
       m._vibeScore = score;
     });
@@ -1637,19 +1698,16 @@
 
     const jikanTask = malId
       ? (async () => {
-          const full = await fetchJsonSafe(`https://api.jikan.moe/v4/anime/${malId}/full`);
-          let streaming = full?.data?.streaming || [];
-          if (!streaming.length) {
-            const st = await fetchJsonSafe(`https://api.jikan.moe/v4/anime/${malId}/streaming`);
-            streaming = st?.data || [];
-          }
-          return full?.data ? {
+          const full = await fetchJsonSafe(`https://api.jikan.moe/v4/anime/${malId}/full`, 7500);
+          if (!full?.data) return null;
+          const streaming = full.data.streaming || [];
+          return {
             score: full.data.score,
             rank: full.data.rank,
             rating: full.data.rating,
             url: full.data.url,
             streaming: streaming.map(s => ({ name: s.name, url: s.url }))
-          } : null;
+          };
         })()
       : Promise.resolve(null);
 
@@ -1675,17 +1733,8 @@
       };
     })();
 
-    const shikimoriTask = malId
-      ? (async () => {
-          const data = await fetchJsonSafe(`https://shikimori.one/api/animes/${malId}`, 4000);
-          if (!data || !data.id) return null;
-          return {
-            score: data.score,
-            kind: data.kind,
-            url: data.url ? `https://shikimori.one${data.url}` : ''
-          };
-        })()
-      : Promise.resolve(null);
+    // Shikimori blocks browser CORS from static origins — provide clean direct link instead of firing a failing CORS request
+    const shikimoriTask = Promise.resolve(malId ? { url: `https://shikimori.one/animes/${malId}` } : null);
 
     // TVMaze: use /search/shows and strictly require Animation/Japanese + title match
     const tvmazeTask = (async () => {
@@ -1852,6 +1901,8 @@
       }
     }
     activeModalAnime = anime;
+    // Always verify factual EN dub status via root Media(id) if not yet cached
+    await verifyDubStatusBatch([anime]);
 
     const state = getState();
     const wl = state.watchlist[anime.id] || null;
@@ -2061,8 +2112,8 @@
             <div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;">Verified Cross-DB Scores</div>
             <div style="font-size:12.5px;color:var(--text);margin-top:3px;">
               Kitsu: ${multi.kitsu?.rating ? `<a href="${escapeHtml(multi.kitsu.url)}" target="_blank" rel="noopener">${multi.kitsu.rating}%</a>` : '—'} ·
-              Shikimori: ${multi.shikimori?.score || '—'} ·
               TVMaze: ${multi.tvmaze?.rating ? `<a href="${escapeHtml(multi.tvmaze.url)}" target="_blank" rel="noopener">${multi.tvmaze.rating}</a>` : '—'}
+              ${multi.shikimori?.url ? ` · <a href="${escapeHtml(multi.shikimori.url)}" target="_blank" rel="noopener">Shikimori ↗</a>` : ''}
             </div>
             ${multi.tvmaze?.network ? `<div style="font-size:11.5px;">Network: ${escapeHtml(multi.tvmaze.network)}</div>` : ''}
           </div>
@@ -2140,6 +2191,7 @@
     getStreamingLinks,
     isFreeWithAds,
     classifyDub,
+    verifyDubStatusBatch,
     anilistQuery,
     fetchAnimeById,
     searchAnimeQuick,
