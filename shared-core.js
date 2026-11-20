@@ -472,6 +472,8 @@
           progress: Math.max(0, Number(item.progress) || 0),
           notes: typeof item.notes === 'string' ? item.notes : '',
           dubOverride: item.dubOverride || '',
+          dubLag: (item.dubLag === '' || item.dubLag == null) ? null : Math.max(0, Number(item.dubLag)),
+          dubDay: item.dubDay !== undefined && item.dubDay !== null ? String(item.dubDay) : '',
           customPlatforms: Array.isArray(item.customPlatforms) ? item.customPlatforms : [],
           customFreeWithAds: Boolean(item.customFreeWithAds),
           updatedAt: Number(item.updatedAt) || out.updatedAt || Date.now()
@@ -589,6 +591,12 @@
       progress: patch.progress !== undefined ? Math.max(0, Number(patch.progress)) : (prev.progress || 0),
       notes: patch.notes !== undefined ? String(patch.notes) : (prev.notes || ''),
       dubOverride: patch.dubOverride !== undefined ? patch.dubOverride : (prev.dubOverride ?? prevOvr.dubOverride ?? ''),
+      dubLag: patch.dubLag !== undefined
+        ? ((patch.dubLag === '' || patch.dubLag == null) ? null : Math.max(0, Number(patch.dubLag)))
+        : (prev.dubLag ?? prevOvr.dubLag ?? null),
+      dubDay: patch.dubDay !== undefined
+        ? String(patch.dubDay ?? '')
+        : String(prev.dubDay ?? prevOvr.dubDay ?? ''),
       customPlatforms: patch.customPlatforms !== undefined ? patch.customPlatforms : (prev.customPlatforms ?? prevOvr.customPlatforms ?? []),
       customFreeWithAds: patch.customFreeWithAds !== undefined ? Boolean(patch.customFreeWithAds) : Boolean(prev.customFreeWithAds ?? prevOvr.customFreeWithAds),
       updatedAt: now
@@ -600,6 +608,8 @@
     // Mirror overrides cleanly
     state.overrides[id] = {
       dubOverride: nextItem.dubOverride,
+      dubLag: nextItem.dubLag,
+      dubDay: nextItem.dubDay,
       customPlatforms: nextItem.customPlatforms,
       customFreeWithAds: nextItem.customFreeWithAds,
       updatedAt: now
@@ -626,6 +636,10 @@
     const prev = state.overrides[id] || {};
     const next = {
       dubOverride: patch.dubOverride !== undefined ? patch.dubOverride : (prev.dubOverride || ''),
+      dubLag: patch.dubLag !== undefined
+        ? ((patch.dubLag === '' || patch.dubLag == null) ? null : Math.max(0, Number(patch.dubLag)))
+        : (prev.dubLag ?? null),
+      dubDay: patch.dubDay !== undefined ? String(patch.dubDay ?? '') : String(prev.dubDay ?? ''),
       customPlatforms: patch.customPlatforms !== undefined ? patch.customPlatforms : (prev.customPlatforms || []),
       customFreeWithAds: patch.customFreeWithAds !== undefined ? Boolean(patch.customFreeWithAds) : Boolean(prev.customFreeWithAds),
       updatedAt: now
@@ -1041,15 +1055,63 @@
     return list.some(p => p.freeWithAds);
   }
 
-  // Verified EN Dub cache (in-memory + 24h IndexedDB).
+  // Verified Multi-Language Dub cache (in-memory + 24h IndexedDB).
   // CRITICAL AniList GraphQL quirk: CharacterEdge.voiceActors returns null unless `node { id }` is also selected inside `edges`!
-  const verifiedDubMap = new Map(); // animeId -> boolean
+  const verifiedDubMap = new Map();       // animeId -> boolean (EN dub confirmed)
+  const verifiedDubLangsMap = new Map();  // animeId -> string[] (e.g. ['EN', 'ES', 'PT', 'FR'])
 
-  function extractHasEnDub(anime) {
+  const LANG_TO_CODE = {
+    english: 'EN',
+    spanish: 'ES',
+    portuguese: 'PT',
+    french: 'FR',
+    german: 'DE',
+    italian: 'IT',
+    korean: 'KO',
+    chinese: 'ZH',
+    hebrew: 'HE',
+    hungarian: 'HU',
+    arabic: 'AR',
+    russian: 'RU',
+    thai: 'TH',
+    hindi: 'HI'
+  };
+
+  function extractDubLanguages(anime) {
     const edges = anime?.characters?.edges;
     if (!Array.isArray(edges)) return null;
     if (edges.length > 0 && edges.every(e => e?.voiceActors === null)) return null;
-    return edges.some(e => Array.isArray(e?.voiceActors) && e.voiceActors.length > 0);
+    const langs = new Set();
+    for (const e of edges) {
+      for (const va of (e?.voiceActors || [])) {
+        const raw = String(va?.languageV2 || '').trim().toLowerCase();
+        if (!raw || raw === 'japanese') continue;
+        const code = LANG_TO_CODE[raw] || raw.slice(0, 2).toUpperCase();
+        langs.add(code);
+      }
+    }
+    // Keep EN first if present
+    return Array.from(langs).sort((a, b) => (a === 'EN' ? -1 : b === 'EN' ? 1 : a.localeCompare(b)));
+  }
+
+  function extractHasEnDub(anime) {
+    const langs = extractDubLanguages(anime);
+    if (langs === null) return null;
+    return langs.includes('EN');
+  }
+
+  function getDubLanguages(anime) {
+    const id = Number(anime?.id);
+    if (id && verifiedDubLangsMap.has(id)) return verifiedDubLangsMap.get(id);
+    const inline = extractDubLanguages(anime);
+    if (inline !== null) {
+      if (id) {
+        verifiedDubLangsMap.set(id, inline);
+        verifiedDubMap.set(id, inline.includes('EN'));
+      }
+      return inline;
+    }
+    return [];
   }
 
   async function verifyDubStatusBatch(animeList) {
@@ -1059,25 +1121,25 @@
     for (const item of list) {
       const id = Number(item?.id || item);
       if (!id) continue;
-      // First check if the media payload itself already has resolved voiceActors
       if (typeof item === 'object') {
-        const inlineVal = extractHasEnDub(item);
-        if (typeof inlineVal === 'boolean') {
-          verifiedDubMap.set(id, inlineVal);
+        const inlineLangs = extractDubLanguages(item);
+        if (inlineLangs !== null) {
+          verifiedDubLangsMap.set(id, inlineLangs);
+          verifiedDubMap.set(id, inlineLangs.includes('EN'));
           continue;
         }
       }
-      if (verifiedDubMap.has(id)) continue;
-      const cached = await cacheGet(`dub_en_v3_${id}`);
-      if (cached && typeof cached.hasEnDub === 'boolean') {
-        verifiedDubMap.set(id, cached.hasEnDub);
+      if (verifiedDubLangsMap.has(id)) continue;
+      const cached = await cacheGet(`dub_langs_v4_${id}`);
+      if (cached && Array.isArray(cached.langs)) {
+        verifiedDubLangsMap.set(id, cached.langs);
+        verifiedDubMap.set(id, cached.langs.includes('EN'));
       } else if (!toFetch.includes(id)) {
         toFetch.push(id);
       }
     }
     if (!toFetch.length) return verifiedDubMap;
 
-    // Resolve up to 50 titles per SINGLE Page(id_in) request — with `node { id }` inside edges so AniList returns real EN VAs!
     const query = `
       query ($ids: [Int]) {
         Page(page: 1, perPage: 50) {
@@ -1086,7 +1148,7 @@
             characters(perPage: 5, role: MAIN) {
               edges {
                 node { id }
-                voiceActors(language: ENGLISH) { id }
+                voiceActors { id languageV2 }
               }
             }
           }
@@ -1099,14 +1161,15 @@
         const data = await anilistQuery(query, { ids: slice });
         for (const m of (data?.Page?.media || [])) {
           if (!m || !m.id) continue;
-          const hasEnDub = extractHasEnDub(m);
-          if (typeof hasEnDub === 'boolean') {
-            verifiedDubMap.set(m.id, hasEnDub);
-            await cacheSet(`dub_en_v3_${m.id}`, { hasEnDub }, TTL_STABLE);
+          const langs = extractDubLanguages(m);
+          if (langs !== null) {
+            verifiedDubLangsMap.set(m.id, langs);
+            verifiedDubMap.set(m.id, langs.includes('EN'));
+            await cacheSet(`dub_langs_v4_${m.id}`, { langs }, TTL_STABLE);
           }
         }
       } catch (err) {
-        console.warn('Batch EN dub verification warning:', err.message);
+        console.warn('Batch dub language verification warning:', err.message);
       }
     }
     return verifiedDubMap;
@@ -1119,17 +1182,46 @@
     const id = Number(anime?.id);
     const ovr = id && (state.overrides[id] || state.watchlist[id]);
     if (ovr?.dubOverride) return ovr.dubOverride === 'Dubbed' ? 'EN Dub' : ovr.dubOverride;
+    if (ovr && ovr.dubLag === 0) return 'Simuldub';
+    if (ovr && typeof ovr.dubLag === 'number' && ovr.dubLag > 0) return 'Staggered Dub';
 
-    let hasEnVa = false;
-    if (id && verifiedDubMap.has(id)) {
-      hasEnVa = verifiedDubMap.get(id);
-    } else {
-      hasEnVa = extractHasEnDub(anime) === true;
-    }
+    const langs = getDubLanguages(anime);
+    const hasEnVa = langs.includes('EN') || (id && verifiedDubMap.get(id) === true);
     if (hasEnVa) {
       return anime?.status === 'RELEASING' ? 'EN Dub (Ongoing)' : 'EN Dub';
     }
     return 'Sub / No EN VA';
+  }
+
+  // Computes Dual-Track release metadata (JP Sub vs Delayed/Simul EN Dub + extra dub languages)
+  function getDubTrackInfo(anime, currentSubEp = null) {
+    const state = getState();
+    const id = Number(anime?.id);
+    const ovr = (id && (state.overrides[id] || state.watchlist[id])) || {};
+    const dub = classifyDub(anime);
+    const langs = getDubLanguages(anime);
+    const otherLangs = langs.filter(l => l !== 'EN');
+    const isSubOnly = dub === 'Sub / No EN VA' || dub === 'Sub Only';
+    const isSimuldub = dub === 'Simuldub' || ovr.dubLag === 0;
+    const dubLag = (typeof ovr.dubLag === 'number' && !Number.isNaN(ovr.dubLag)) ? ovr.dubLag : null;
+    const dubDay = ovr.dubDay !== undefined && ovr.dubDay !== '' ? Number(ovr.dubDay) : null; // 0=Mon..6=Sun
+
+    let dubEp = null;
+    if (!isSubOnly && typeof currentSubEp === 'number' && currentSubEp > 0) {
+      if (isSimuldub) dubEp = currentSubEp;
+      else if (dubLag !== null && currentSubEp - dubLag >= 1) dubEp = currentSubEp - dubLag;
+    }
+
+    return {
+      dub,
+      hasEnDub: !isSubOnly,
+      isSimuldub,
+      dubLag,
+      dubDay,
+      dubEp,
+      langs,
+      otherLangs
+    };
   }
 
   // --------------------------------------------------------------------------
@@ -1170,7 +1262,7 @@
     characters(perPage: 4, role: MAIN) {
       edges {
         node { id }
-        voiceActors(language: ENGLISH) { id }
+        voiceActors { id languageV2 }
       }
     }
     staff(perPage: 25, sort: RELEVANCE) {
@@ -2039,8 +2131,14 @@
     const keyStaff = getKeyStaff(anime);
     const topTags = getTopSubgenreTags(anime, 5);
     const platforms = detectPlatforms(anime);
-    const dubLabel = classifyDub(anime, platforms);
+    const dubInfo = getDubTrackInfo(anime, anime.nextAiringEpisode ? Math.max(1, anime.nextAiringEpisode.episode - 1) : null);
+    const dubLabel = dubInfo.dub;
     const freeAds = isFreeWithAds(anime, platforms);
+    const DAY_OPTS = [
+      { v: '', l: 'Same day as Sub' },
+      { v: '0', l: 'Monday' }, { v: '1', l: 'Tuesday' }, { v: '2', l: 'Wednesday' },
+      { v: '3', l: 'Thursday' }, { v: '4', l: 'Friday' }, { v: '5', l: 'Saturday' }, { v: '6', l: 'Sunday' }
+    ];
 
     titleEl.textContent = title;
 
@@ -2068,6 +2166,13 @@
           </div>
           <div style="font-size:12.5px;color:var(--text-muted);">
             <strong>Studio:</strong> ${studiosHtml} &nbsp;•&nbsp; <strong>Genres:</strong> ${escapeHtml((anime.genres || []).join(', ') || '—')}
+          </div>
+          <div class="meta-row" style="gap:5px;">
+            <span style="font-size:11.5px;color:var(--text-dim);font-weight:700;">AUDIO TRACKS:</span>
+            <span class="badge badge-muted">JP Sub</span>
+            ${dubInfo.langs.length
+              ? dubInfo.langs.map(l => `<span class="badge ${l === 'EN' ? 'badge-cyan' : 'badge-purple'}">${escapeHtml(l)} Dub</span>`).join('')
+              : '<span style="font-size:11.5px;color:var(--text-dim);">No dubbed VAs indexed on AniList</span>'}
           </div>
           ${keyStaff.length ? `
             <div class="meta-row" style="gap:6px;">
@@ -2126,6 +2231,19 @@
               ${DUB_OPTIONS.map(d => `<option value="${d}" ${(ovr.dubOverride || '') === d ? 'selected' : ''}>${d || 'Auto (' + dubLabel + ')'}</option>`).join('')}
             </select>
           </div>
+          <div class="form-field">
+            <label for="af-wl-dublag">Dub Episode Delay (Lag behind Sub)</label>
+            <input id="af-wl-dublag" type="number" min="0" max="1500" class="input input-full" placeholder="Blank=unset, 0=Simuldub, 2=2w lag" value="${ovr.dubLag ?? ''}">
+          </div>
+          <div class="form-field">
+            <label for="af-wl-dubday">Delayed Dub Release Day</label>
+            <select id="af-wl-dubday" class="select">
+              ${DAY_OPTS.map(o => `<option value="${o.v}" ${String(ovr.dubDay ?? '') === o.v ? 'selected' : ''}>${o.l}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div style="font-size:11.5px;color:var(--text-dim);margin-top:6px;">
+          Set <strong>Dub Episode Delay</strong> (e.g. <code>2</code> for a 2-week Crunchyroll delay, <code>4</code> for HIDIVE, or <code>0</code> for same-day Simuldub) to display both <strong>Sub Ep N</strong> and <strong>EN Dub Ep (N − lag)</strong> as separate tracks in Releases &amp; the 7-Day Schedule.
         </div>
         <div class="form-field" style="margin-top:10px;">
           <label for="af-wl-notes">Personal Notes</label>
@@ -2207,13 +2325,22 @@
       inp.value = String((Number(inp.value) || 0) + 1);
     });
 
+    const readDubScheduleInputs = () => {
+      const rawLag = bodyEl.querySelector('#af-wl-dublag')?.value.trim() ?? '';
+      return {
+        dubOverride: bodyEl.querySelector('#af-wl-dub').value,
+        dubLag: rawLag === '' ? null : Math.max(0, Number(rawLag)),
+        dubDay: bodyEl.querySelector('#af-wl-dubday')?.value ?? ''
+      };
+    };
+
     backdrop.querySelector('#af-wl-save').addEventListener('click', () => {
       upsertWatchlistItem(anime, {
         status: bodyEl.querySelector('#af-wl-status').value,
         rating: Number(bodyEl.querySelector('#af-wl-rating').value) || 0,
         progress: Number(bodyEl.querySelector('#af-wl-progress').value) || 0,
         notes: bodyEl.querySelector('#af-wl-notes').value,
-        dubOverride: bodyEl.querySelector('#af-wl-dub').value,
+        ...readDubScheduleInputs(),
         customPlatforms: Array.from(customSet),
         customFreeWithAds: customFree
       });
@@ -2223,11 +2350,11 @@
 
     backdrop.querySelector('#af-ovr-only').addEventListener('click', () => {
       updateOverrides(anime.id, {
-        dubOverride: bodyEl.querySelector('#af-wl-dub').value,
+        ...readDubScheduleInputs(),
         customPlatforms: Array.from(customSet),
         customFreeWithAds: customFree
       });
-      toast(`Saved streaming/dub overrides for "${title}".`, 'success');
+      toast(`Saved streaming & dub track overrides for "${title}".`, 'success');
     });
 
     const remBtn = backdrop.querySelector('#af-wl-remove');
@@ -2357,6 +2484,8 @@
     getStreamingLinks,
     isFreeWithAds,
     classifyDub,
+    getDubLanguages,
+    getDubTrackInfo,
     verifyDubStatusBatch,
     anilistQuery,
     fetchAnimeById,

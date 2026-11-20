@@ -83,6 +83,9 @@
             <div id="scheduleRangeLabel" style="font-size:12px;color:var(--text-muted);margin-top:2px;">Loading local week bounds...</div>
           </div>
           <div class="meta-row">
+            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-muted);cursor:pointer;" title="Show separate delayed EN Dub release entries alongside JP Sub episodes">
+              <input type="checkbox" id="scheduleShowDubs" checked> Show Delayed Dubs
+            </label>
             <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-muted);cursor:pointer;">
               <input type="checkbox" id="scheduleJpOnly" checked> JP Anime only
             </label>
@@ -475,7 +478,7 @@
         const cover = AF.getCover(anime);
         const extra = tmdbExtraByAnimeId.get(anime.id) || [];
         const platforms = AF.detectPlatforms(anime, extra);
-        const dub = AF.classifyDub(anime, platforms);
+        const dubInfo = AF.getDubTrackInfo(anime, anime._recentEp || null);
         const freeAds = AF.isFreeWithAds(anime, platforms);
 
         const topLeftBadges = [];
@@ -488,11 +491,19 @@
           : '';
 
         const bottomBadges = [];
-        if (dub !== 'Sub / No EN VA') {
-          const dubTip = dub === 'EN Dub (Ongoing)'
-            ? 'English voice cast confirmed on AniList — ongoing dubs often release on a staggered schedule behind Japanese episodes'
-            : 'Verified English voice cast on AniList or manual override';
-          bottomBadges.push(`<span class="badge badge-cyan" title="${dubTip}">${AF.escapeHtml(dub)}</span>`);
+        if (dubInfo.hasEnDub) {
+          if (dubInfo.isSimuldub && dubInfo.dubEp) {
+            bottomBadges.push(`<span class="badge badge-cyan" title="Same-day Simuldub release">Simuldub Ep ${dubInfo.dubEp}</span>`);
+          } else if (dubInfo.dubEp && dubInfo.dubLag > 0) {
+            bottomBadges.push(`<span class="badge badge-cyan" title="Staggered EN Dub (${dubInfo.dubLag} eps behind Sub) — editable in Details">EN Dub Ep ${dubInfo.dubEp} (−${dubInfo.dubLag})</span>`);
+          } else if (anime.status === 'RELEASING') {
+            bottomBadges.push(`<span class="badge badge-cyan" title="English cast confirmed — dub releases on a delayed schedule behind Sub. Open Details to set exact episode lag.">EN Dub · Delayed</span>`);
+          } else {
+            bottomBadges.push(`<span class="badge badge-cyan" title="Verified English voice cast on AniList or manual override">${AF.escapeHtml(dubInfo.dub)}</span>`);
+          }
+        }
+        if (dubInfo.otherLangs.length) {
+          bottomBadges.push(`<span class="badge badge-purple" title="Additional confirmed dub languages: ${AF.escapeHtml(dubInfo.otherLangs.join(', '))}">+${dubInfo.otherLangs.length} ${dubInfo.otherLangs.length === 1 ? 'lang' : 'langs'}</span>`);
         }
         if (anime.source === 'ORIGINAL') {
           bottomBadges.push(`<span class="badge badge-amber" title="Anime Original production">★ Original</span>`);
@@ -636,7 +647,7 @@
         if (licensedByList) vars.licensed = licensedByList;
 
         try {
-          const cacheKey = forceRefresh ? null : `releases_v3_${activePlatform}`;
+          const cacheKey = forceRefresh ? null : `releases_v4_${activePlatform}`;
           const data = await AF.anilistQuery(query, vars, { cacheKey, ttl: AF.TTL_DYNAMIC });
 
           const mergedMap = new Map();
@@ -729,7 +740,9 @@
             const ageHrs = Math.floor((nowSec - m._recentAirAt) / 3600);
             const isUnder24 = ageHrs < 24;
             const rel = AF.formatRelativeCountdown(m._recentAirAt);
-            airingBadge = `<span class="badge ${isUnder24 ? 'badge-rose' : 'badge-amber'}">Ep ${m._recentEp} · ${AF.escapeHtml(rel)}</span>`;
+            const dubInfo = AF.getDubTrackInfo(m, m._recentEp);
+            const trackPrefix = dubInfo.isSimuldub ? 'Sub+Dub' : 'Sub';
+            airingBadge = `<span class="badge ${isUnder24 ? 'badge-rose' : 'badge-amber'}">${trackPrefix} Ep ${m._recentEp} · ${AF.escapeHtml(rel)}</span>`;
           } else if (m._source === 'ona') {
             airingBadge = `<span class="badge badge-purple">Active ONA</span>`;
           } else if (m._source === 'catalog') {
@@ -819,7 +832,7 @@
           }
         `;
         try {
-          const cacheKey = forceRefresh ? null : `schedule_week_v2_${startSec}`;
+          const cacheKey = forceRefresh ? null : `schedule_week_v3_${startSec}`;
           const data = await AF.anilistQuery(query, { start: startSec, end: endSec }, { cacheKey, ttl: AF.TTL_DYNAMIC });
           const all = [
             ...(data?.p1?.airingSchedules || []),
@@ -838,6 +851,7 @@
         const grid = document.getElementById('scheduleGrid');
         const wlOnly = document.getElementById('scheduleWatchlistOnly').checked;
         const jpOnly = document.getElementById('scheduleJpOnly').checked;
+        const showDubs = document.getElementById('scheduleShowDubs')?.checked !== false;
         const wl = AF.getState().watchlist;
         const nowSec = Math.floor(Date.now() / 1000);
         const todayJsDay = new Date().getDay();
@@ -853,7 +867,25 @@
           // Explicit day-0 Sunday bucketing at index 6
           const jsDay = d.getDay();
           const idx = jsDay === 0 ? 6 : jsDay - 1;
-          buckets[idx].push(item);
+          const dubInfo = AF.getDubTrackInfo(item.media, item.episode);
+
+          // 1. Primary Japanese Broadcast (Sub) entry — or unified Sub+Dub if same-day Simuldub
+          buckets[idx].push({
+            ...item,
+            _track: dubInfo.isSimuldub ? 'simuldub' : 'sub',
+            _dubInfo: dubInfo
+          });
+
+          // 2. Separate Delayed Dub entry when show has a configured episode lag (e.g. Sub Ep 8 + EN Dub Ep 6)
+          if (showDubs && dubInfo.hasEnDub && !dubInfo.isSimuldub && dubInfo.dubEp && dubInfo.dubLag > 0) {
+            const dubIdx = dubInfo.dubDay !== null ? dubInfo.dubDay : idx;
+            buckets[dubIdx].push({
+              ...item,
+              episode: dubInfo.dubEp,
+              _track: 'dub',
+              _dubInfo: dubInfo
+            });
+          }
         }
 
         const mediaById = new Map(scheduleCache.map(s => [s.media.id, s.media]));
@@ -889,14 +921,30 @@
                   const aired = s.airingAt <= nowSec;
                   const rel = AF.formatRelativeCountdown(s.airingAt);
                   const inWl = Boolean(wl[m.id]);
+                  const isDubRow = s._track === 'dub';
+                  const di = s._dubInfo;
+                  const trackBadge = isDubRow
+                    ? `<span class="badge badge-cyan">EN DUB · Ep ${s.episode}</span>`
+                    : s._track === 'simuldub'
+                      ? `<span class="badge badge-cyan">SUB+DUB · Ep ${s.episode}</span>`
+                      : `<span class="badge badge-muted">SUB · Ep ${s.episode}</span>`;
+                  const delayedHint = (!isDubRow && showDubs && di.hasEnDub && !di.isSimuldub && !di.dubEp)
+                    ? `<span class="badge badge-cyan" title="Confirmed EN Dub (staggered schedule) — click to set exact episode delay &amp; day">+ EN Dub (delayed)</span>`
+                    : '';
+                  const langHint = (!isDubRow && di.otherLangs.length)
+                    ? `<span class="badge badge-purple" title="Other dubs: ${AF.escapeHtml(di.otherLangs.join(', '))}">+${di.otherLangs.length} lang${di.otherLangs.length > 1 ? 's' : ''}</span>`
+                    : '';
                   return `
-                    <div class="schedule-item" data-anime-id="${m.id}" tabindex="0">
+                    <div class="schedule-item ${isDubRow ? 'dub-release' : ''}" data-anime-id="${m.id}" tabindex="0">
                       <img src="${AF.escapeHtml(AF.getCover(m))}" alt="" loading="lazy">
                       <div class="schedule-item-info">
                         <div class="schedule-item-title">${AF.escapeHtml(AF.getDisplayTitle(m))}</div>
-                        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">Ep ${s.episode} · ${timeStr}</div>
+                        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">${isDubRow ? `−${di.dubLag}w lag` : timeStr}</div>
                         <div style="display:flex;flex-wrap:wrap;gap:4px;">
-                          <span class="badge ${aired ? 'badge-emerald' : 'badge-amber'}">${aired ? '✓ ' + rel : rel}</span>
+                          ${trackBadge}
+                          ${!isDubRow ? `<span class="badge ${aired ? 'badge-emerald' : 'badge-amber'}">${aired ? '✓ ' + rel : rel}</span>` : ''}
+                          ${delayedHint}
+                          ${langHint}
                           ${inWl ? `<span class="badge badge-accent">★ Saved</span>` : ''}
                         </div>
                       </div>
@@ -915,6 +963,7 @@
         });
       }
 
+      document.getElementById('scheduleShowDubs').addEventListener('change', renderScheduleGrid);
       document.getElementById('scheduleWatchlistOnly').addEventListener('change', renderScheduleGrid);
       document.getElementById('scheduleJpOnly').addEventListener('change', renderScheduleGrid);
       document.getElementById('refreshScheduleBtn').addEventListener('click', () => loadSchedule(true));

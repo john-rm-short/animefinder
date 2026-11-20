@@ -749,6 +749,11 @@ button {
   transition: border-color 0.15s;
 }
 .schedule-item:hover { border-color: var(--accent); }
+.schedule-item.dub-release {
+  border-left: 3px solid var(--cyan);
+  background: rgba(56, 189, 248, 0.07);
+}
+.schedule-item.dub-release:hover { border-color: var(--cyan); }
 .schedule-item img {
   width: 42px;
   height: 58px;
