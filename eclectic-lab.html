@@ -109,6 +109,9 @@
             </div>
           </div>
           <div class="meta-row">
+            <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-muted);cursor:pointer;">
+              <input type="checkbox" id="arithEntryPointsOnly" checked> Entry Points Only
+            </label>
             <button type="button" class="btn btn-sm" id="resetDefaultEqBtn">Preset: Bebop + Mushishi − Action</button>
             <button type="button" class="btn btn-primary btn-sm" id="solveEquationBtn">= Solve Equation</button>
           </div>
@@ -220,6 +223,8 @@
       function renderLabCard(anime, badgeHtml = '') {
         const wl = AF.getState().watchlist[anime.id];
         const title = AF.getDisplayTitle(anime);
+        const leadStudio = anime.studios?.nodes?.[0]?.name || '';
+        const subTags = AF.getTopSubgenreTags(anime, 2);
         return `
           <article class="anime-card" tabindex="0" data-id="${anime.id}">
             <div class="anime-card-cover-wrap">
@@ -229,6 +234,7 @@
                 ${anime.averageScore ? `<span class="badge badge-accent">★ ${anime.averageScore}%</span>` : ''}
               </div>
               <div class="anime-card-overlay-bottom">
+                ${anime.source === 'ORIGINAL' ? `<span class="badge badge-amber">★ Original</span>` : ''}
                 <span class="badge badge-muted">Pop ${AF.formatCompactNumber(anime.popularity)}</span>
                 ${anime.seasonYear ? `<span class="badge badge-muted">${anime.seasonYear}</span>` : ''}
               </div>
@@ -237,9 +243,12 @@
             <div class="anime-card-body">
               <h3 class="anime-card-title">${AF.escapeHtml(title)}</h3>
               <div class="anime-card-meta">
-                <span>${AF.escapeHtml((anime.genres || []).slice(0, 2).join(', ') || anime.format || 'Anime')}</span>
-                <a href="./vibe-graph.html?seed=${anime.id}" onclick="event.stopPropagation();" style="font-size:11px;">Graph ↗</a>
+                ${leadStudio
+                  ? `<a href="./index.html?tab=archives&amp;studio=${encodeURIComponent(leadStudio)}" onclick="event.stopPropagation();" style="color:var(--cyan);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${AF.escapeHtml(leadStudio)}</a>`
+                  : `<span>${AF.escapeHtml((anime.genres || []).slice(0, 2).join(', ') || anime.format || 'Anime')}</span>`}
+                <a href="./vibe-graph.html?seed=${anime.id}" onclick="event.stopPropagation();" style="font-size:11px;flex-shrink:0;">Graph ↗</a>
               </div>
+              ${subTags.length ? `<div style="font-size:10.5px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${subTags.map(t => '#' + AF.escapeHtml(t)).join(' · ')}</div>` : ''}
             </div>
           </article>
         `;
@@ -889,10 +898,12 @@
             return { media: m, score };
           }).sort((a, b) => b.score - a.score);
 
-          // Deduplicate franchise recap/sequel clusters (max 1 entry per franchise stem)
+          // Deduplicate franchise recap/sequel clusters + optional Entry Points Only filter
+          const entryOnly = document.getElementById('arithEntryPointsOnly')?.checked;
           const seenFranchise = new Set();
           const ranked = [];
           for (const item of allRanked) {
+            if (entryOnly && AF.isSequelOrRecap(item.media)) continue;
             const stem = AF.getDisplayTitle(item.media)
               .toLowerCase()
               .split(/[:\-–—(]/)[0]
@@ -1014,6 +1025,7 @@
       });
       document.getElementById('resetDefaultEqBtn').addEventListener('click', loadDefaultPresetEquation);
       document.getElementById('solveEquationBtn').addEventListener('click', solveEquation);
+      document.getElementById('arithEntryPointsOnly').addEventListener('change', solveEquation);
       document.addEventListener('click', (ev) => {
         if (!ev.target.closest('#eqAddAnime') && !ev.target.closest('#eqAnimeDropdown')) {
           eqAnimeDrop.classList.remove('open');
@@ -1026,6 +1038,7 @@
       let roulettePool = [];
       let currentRoulette = null;
       let rouletteRevealed = false;
+      let rouletteHints = { era: false, studio: false, source: false, staff: false };
 
       function redactSynopsis(anime) {
         let text = AF.stripHtml(anime.description || '');
@@ -1096,6 +1109,7 @@
         const idx = Math.floor(Math.random() * roulettePool.length);
         currentRoulette = roulettePool.splice(idx, 1)[0];
         rouletteRevealed = false;
+        rouletteHints = { era: false, studio: false, source: false, staff: false };
         renderRouletteCard();
       }
 
@@ -1106,19 +1120,32 @@
         const wl = AF.getState().watchlist[m.id];
 
         if (!rouletteRevealed) {
+          const studioName = (m.studios?.nodes || []).map(s => s.name).join(', ') || 'Unknown Studio';
+          const sourceLbl = AF.formatSourceLabel(m.source) || 'Unknown';
+          const staffList = AF.getKeyStaff(m).map(s => `${s.role}: ${s.name}`).join(' · ') || 'No lead staff indexed';
+          const eraFmt = `${m.seasonYear || 'Unknown Year'} · ${m.format || 'Anime'}${m.episodes ? ' · ' + (m.episodes === 1 ? '1 ep' : m.episodes + ' eps') : ''}`;
+
           stage.innerHTML = `
             <div class="roulette-card">
               <div class="meta-row" style="justify-content:space-between;margin-bottom:14px;">
                 <span class="badge badge-amber">MYSTERY PREMISE · ARTWORK &amp; TITLE HIDDEN</span>
                 <div class="meta-row">
                   ${(m.genres || []).slice(0, 3).map(g => `<span class="badge badge-purple">${AF.escapeHtml(g)}</span>`).join('')}
-                  ${m.format ? `<span class="badge badge-muted">${AF.escapeHtml(m.format)}</span>` : ''}
-                  ${m.episodes ? `<span class="badge badge-muted">${m.episodes === 1 ? '1 ep' : m.episodes + ' eps'}</span>` : ''}
                 </div>
               </div>
-              <p style="font-size:15px;line-height:1.7;color:#e2e8f0;margin:0 0 20px;white-space:pre-line;">
+              <p style="font-size:15px;line-height:1.7;color:#e2e8f0;margin:0 0 16px;white-space:pre-line;">
                 ${redactSynopsis(m)}
               </p>
+              <!-- Optional Spoiler-Free Pedigree Hints -->
+              <div style="margin-bottom:18px;padding:12px;border-radius:10px;background:rgba(9,13,26,0.55);border:1px solid var(--border);">
+                <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px;">Spoiler-Free Pedigree Hints (Click to Peek)</div>
+                <div class="pills-row">
+                  <button type="button" class="pill ${rouletteHints.era ? 'active' : ''}" data-hint="era">${rouletteHints.era ? '📅 ' + AF.escapeHtml(eraFmt) : '📅 Reveal Era &amp; Format'}</button>
+                  <button type="button" class="pill ${rouletteHints.studio ? 'active' : ''}" data-hint="studio">${rouletteHints.studio ? '🎬 ' + AF.escapeHtml(studioName) : '🎬 Reveal Studio'}</button>
+                  <button type="button" class="pill ${rouletteHints.source ? 'active' : ''}" data-hint="source">${rouletteHints.source ? '📖 Source: ' + AF.escapeHtml(sourceLbl) : '📖 Reveal Source'}</button>
+                  <button type="button" class="pill ${rouletteHints.staff ? 'active' : ''}" data-hint="staff">${rouletteHints.staff ? '🎼 ' + AF.escapeHtml(staffList) : '🎼 Reveal Director / Composer'}</button>
+                </div>
+              </div>
               <div class="meta-row">
                 <button type="button" class="btn btn-emerald" id="blindSaveBtn">${wl ? '✓ Saved Blindly (' + AF.escapeHtml(wl.status) + ')' : '★ Blind Save to Watchlist'}</button>
                 <button type="button" class="btn btn-primary" id="revealRouletteBtn">👁 Reveal Title &amp; Artwork</button>
@@ -1126,6 +1153,13 @@
               </div>
             </div>
           `;
+          stage.querySelectorAll('[data-hint]').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const k = btn.dataset.hint;
+              rouletteHints[k] = !rouletteHints[k];
+              renderRouletteCard();
+            });
+          });
         } else {
           const title = AF.getDisplayTitle(m);
           const cleanDesc = AF.stripHtml(m.description || '').replace(/\s*(\(Source:[^)]+\)|\[Written by[^\]]+\])\s*/gi, ' ').trim();
@@ -1187,12 +1221,20 @@
         if (activeTab === 'roulette' && currentRoulette) renderRouletteCard();
       });
 
-      // Boot deep-link routing (?tab=vibe-map|auteur|arithmetic|roulette & ?seed=<id>)
+      // Boot deep-link routing (?tab=vibe-map|auteur|arithmetic|roulette & ?seed=<id> & ?staff=<name>)
       const params = new URLSearchParams(window.location.search);
-      const initialTab = ['vibe-map', 'auteur', 'arithmetic', 'roulette'].includes(params.get('tab'))
-        ? params.get('tab')
-        : 'vibe-map';
-      switchTab(initialTab);
+      const deepStaff = params.get('staff');
+      const initialTab = deepStaff
+        ? 'auteur'
+        : (['vibe-map', 'auteur', 'arithmetic', 'roulette'].includes(params.get('tab')) ? params.get('tab') : 'vibe-map');
+      if (deepStaff) {
+        loadedTabs.add('auteur');
+        switchTab('auteur');
+        document.getElementById('staffSearchInput').value = deepStaff;
+        loadAuteur(deepStaff);
+      } else {
+        switchTab(initialTab);
+      }
     })();
   </script>
 </body>

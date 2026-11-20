@@ -52,6 +52,12 @@
             <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-muted);cursor:pointer;">
               <input type="checkbox" id="releasesJpOnly" checked> JP Anime only
             </label>
+            <select id="lengthFilterSelect" class="select" aria-label="Filter by Format and Length">
+              <option value="all">Length: All</option>
+              <option value="tv">TV (20m+)</option>
+              <option value="shorts">Shorts (&lt;12m)</option>
+              <option value="movies">Movies &amp; OVAs</option>
+            </select>
             <select id="dubFilterSelect" class="select" aria-label="Filter by Dub status">
               <option value="all">Audio: All</option>
               <option value="dubbed">Verified EN Dub / Simuldub</option>
@@ -282,6 +288,9 @@
             <button type="button" class="pill active" id="archiveModeYear">📅 By Year (1970–2026)</button>
             <button type="button" class="pill" id="archiveModeStudio">🎬 By Studio (up to 75 titles)</button>
           </div>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);cursor:pointer;">
+            <input type="checkbox" id="archiveEntryPointsOnly"> Entry Points Only (hide sequels/recaps)
+          </label>
         </div>
 
         <!-- By Year Controls -->
@@ -333,6 +342,7 @@
       let activeTab = 'releases';
       let activePlatform = 'all'; // 'all' | 'free' | platformId
       let activeDubFilter = 'all';
+      let activeLengthFilter = 'all';
       let releasesCache = [];
       let tmdbExtraByAnimeId = new Map();
       let scheduleCache = [];
@@ -476,8 +486,17 @@
         if (dub !== 'Sub / No EN VA') {
           bottomBadges.push(`<span class="badge badge-cyan" title="Verified English voice cast on AniList or override">${AF.escapeHtml(dub)}</span>`);
         }
+        if (anime.source === 'ORIGINAL') {
+          bottomBadges.push(`<span class="badge badge-amber" title="Anime Original production">★ Original</span>`);
+        }
         if (freeAds) bottomBadges.push(`<span class="badge badge-amber">Free w/ Ads</span>`);
         if (options.extraBadge) bottomBadges.push(options.extraBadge);
+
+        const leadStudio = anime.studios?.nodes?.[0]?.name || '';
+        const studioEl = leadStudio
+          ? `<a href="./index.html?tab=archives&amp;studio=${encodeURIComponent(leadStudio)}" onclick="event.stopPropagation();" style="color:var(--cyan);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="Browse ${AF.escapeHtml(leadStudio)} in Archives">${AF.escapeHtml(leadStudio)}</a>`
+          : `<span>${AF.escapeHtml((anime.genres || []).slice(0, 2).join(', ') || 'Anime')}</span>`;
+        const subTags = AF.getTopSubgenreTags(anime, 2);
 
         return `
           <article class="anime-card" tabindex="0" data-anime-id="${anime.id}" aria-label="${AF.escapeHtml(title)}">
@@ -493,9 +512,10 @@
             <div class="anime-card-body">
               <h3 class="anime-card-title" title="${AF.escapeHtml(title)}">${AF.escapeHtml(title)}</h3>
               <div class="anime-card-meta">
-                <span>${AF.escapeHtml((anime.studios?.nodes?.[0]?.name || (anime.genres || []).slice(0, 2).join(', ') || 'Anime'))}</span>
-                <span>${anime.seasonYear || (anime.episodes ? anime.episodes + ' eps' : '')}</span>
+                ${studioEl}
+                <span style="flex-shrink:0;">${anime.seasonYear || (anime.episodes ? (anime.episodes === 1 ? '1 ep' : anime.episodes + ' eps') : '')}</span>
               </div>
+              ${subTags.length ? `<div style="font-size:10.5px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${subTags.map(t => '#' + AF.escapeHtml(t)).join(' · ')}</div>` : ''}
               ${options.watchlistControls ? options.watchlistControls : `
                 <div class="anime-card-platforms">
                   ${platforms.slice(0, 3).map(p => `<span class="platform-tag" style="color:${p.color};border-color:${p.color}55;">${AF.escapeHtml(p.name)}</span>`).join('')}
@@ -675,6 +695,15 @@
           const isDubbed = dub === 'EN Dub' || dub === 'Simuldub';
           if (activeDubFilter === 'dubbed' && !isDubbed) return false;
           if (activeDubFilter === 'sub' && isDubbed) return false;
+
+          if (activeLengthFilter === 'tv') {
+            if (m.format !== 'TV' || (m.duration && m.duration < 15)) return false;
+          } else if (activeLengthFilter === 'shorts') {
+            const isShort = m.format === 'TV_SHORT' || (m.duration && m.duration < 15);
+            if (!isShort) return false;
+          } else if (activeLengthFilter === 'movies') {
+            if (!['MOVIE', 'OVA', 'ONA', 'SPECIAL'].includes(m.format)) return false;
+          }
           return true;
         });
 
@@ -703,6 +732,10 @@
         attachCardHandlers(grid, byId);
       }
 
+      document.getElementById('lengthFilterSelect').addEventListener('change', (ev) => {
+        activeLengthFilter = ev.target.value;
+        renderReleasesGrid();
+      });
       document.getElementById('dubFilterSelect').addEventListener('change', (ev) => {
         activeDubFilter = ev.target.value;
         renderReleasesGrid();
@@ -1425,8 +1458,10 @@
         if (format) vars.format = format;
         try {
           const data = await AF.anilistQuery(query, vars, { cacheKey: `archive_range_v2_${startYr}_${endYr}_${format}_${sort}`, ttl: AF.TTL_DYNAMIC });
-          const list = data?.Page?.media || [];
-          meta.textContent = `Archive: ${rangeLabel}${format ? ' · ' + format : ''} — ${list.length} titles (includes Movies & OVAs)`;
+          let list = data?.Page?.media || [];
+          const entryOnly = document.getElementById('archiveEntryPointsOnly')?.checked;
+          if (entryOnly) list = list.filter(m => !AF.isSequelOrRecap(m));
+          meta.textContent = `Archive: ${rangeLabel}${format ? ' · ' + format : ''}${entryOnly ? ' · Entry Points Only' : ''} — ${list.length} titles (includes Movies & OVAs)`;
           const byId = new Map(list.map(m => [m.id, m]));
           grid.innerHTML = list.length
             ? list.map(m => renderAnimeCard(m)).join('')
@@ -1490,8 +1525,10 @@
             mainList = dedupe(allEdges);
             usedFallback = true;
           }
+          const entryOnly = document.getElementById('archiveEntryPointsOnly')?.checked;
+          if (entryOnly) mainList = mainList.filter(m => !AF.isSequelOrRecap(m));
 
-          meta.textContent = `Studio: ${studio.name} — ${mainList.length} ${usedFallback ? 'all-credited' : 'main-studio'} titles (up to 75 fetched in 1 batched query)`;
+          meta.textContent = `Studio: ${studio.name} — ${mainList.length} ${usedFallback ? 'all-credited' : 'main-studio'}${entryOnly ? ' entry-point' : ''} titles (up to 75 fetched in 1 batched query)`;
           const byId = new Map(mainList.map(m => [m.id, m]));
           grid.innerHTML = mainList.length
             ? mainList.map(m => renderAnimeCard(m)).join('')
@@ -1511,14 +1548,25 @@
         else if (activeTab === 'schedule' && scheduleCache.length) renderScheduleGrid();
       });
 
+      document.getElementById('archiveEntryPointsOnly').addEventListener('change', () => {
+        if (archiveMode === 'year') loadYearArchive();
+        else loadStudioArchive(document.getElementById('studioSearchInput').value.trim() || 'Kyoto Animation');
+      });
+
       // Boot sequence
       renderPlatformFilterBar();
       initArchiveControls();
       const params = new URLSearchParams(window.location.search);
-      const initialTab = ['releases', 'schedule', 'saved', 'radar', 'archives'].includes(params.get('tab'))
-        ? params.get('tab')
-        : 'releases';
+      const deepStudio = params.get('studio');
+      const initialTab = deepStudio
+        ? 'archives'
+        : (['releases', 'schedule', 'saved', 'radar', 'archives'].includes(params.get('tab')) ? params.get('tab') : 'releases');
       switchTab(initialTab);
+
+      if (deepStudio) {
+        document.getElementById('studioSearchInput').value = deepStudio;
+        setArchiveMode('studio');
+      }
 
       const deepAnimeId = Number(params.get('anime'));
       if (deepAnimeId) {

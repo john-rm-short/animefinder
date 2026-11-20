@@ -1120,6 +1120,7 @@
     id
     idMal
     countryOfOrigin
+    source
     title { romaji english native }
     coverImage { large medium color }
     bannerImage
@@ -1141,13 +1142,75 @@
     tags { name rank isMediaSpoiler isGeneralSpoiler }
     externalLinks { site url type }
     nextAiringEpisode { airingAt timeUntilAiring episode }
-    staff(perPage: 8, sort: RELEVANCE) {
+    relations {
+      edges {
+        relationType
+        node { id }
+      }
+    }
+    staff(perPage: 10, sort: RELEVANCE) {
       edges {
         role
         node { id name { full } }
       }
     }
   `;
+
+  function formatSourceLabel(source) {
+    const map = {
+      ORIGINAL: 'Original',
+      MANGA: 'Manga',
+      LIGHT_NOVEL: 'Light Novel',
+      VISUAL_NOVEL: 'Visual Novel',
+      VIDEO_GAME: 'Video Game',
+      NOVEL: 'Novel',
+      WEB_NOVEL: 'Web Novel',
+      DOUJINSHI: 'Doujinshi',
+      COMIC: 'Comic',
+      GAME: 'Game',
+      MULTIMEDIA_PROJECT: 'Multimedia',
+      PICTURE_BOOK: 'Picture Book',
+      OTHER: 'Other'
+    };
+    return map[source] || '';
+  }
+
+  function getTopSubgenreTags(anime, max = 3) {
+    return (anime?.tags || [])
+      .filter(t => t && !t.isMediaSpoiler && !t.isGeneralSpoiler && (t.rank || 0) >= 55)
+      .sort((a, b) => (b.rank || 0) - (a.rank || 0))
+      .slice(0, max)
+      .map(t => t.name);
+  }
+
+  function getKeyStaff(anime) {
+    const edges = anime?.staff?.edges || [];
+    const buckets = [
+      { key: 'Director', re: /^(chief )?director$/i },
+      { key: 'Series Comp', re: /series composition/i },
+      { key: 'Char Design', re: /character design/i },
+      { key: 'Music', re: /^music$/i }
+    ];
+    const out = [];
+    const seen = new Set();
+    for (const b of buckets) {
+      for (const e of edges) {
+        const name = e?.node?.name?.full;
+        if (!name || seen.has(b.key + ':' + name)) continue;
+        if (b.re.test(String(e.role || ''))) {
+          seen.add(b.key + ':' + name);
+          out.push({ role: b.key, name });
+          break;
+        }
+      }
+    }
+    return out;
+  }
+
+  function isSequelOrRecap(anime) {
+    const edges = anime?.relations?.edges || [];
+    return edges.some(e => e?.relationType === 'PREQUEL' || e?.relationType === 'SUMMARY' || e?.relationType === 'PARENT');
+  }
 
   async function anilistQuery(query, variables = {}, { cacheKey = null, ttl = TTL_DYNAMIC } = {}) {
     if (cacheKey) {
@@ -1909,7 +1972,13 @@
     const ovr = state.overrides[anime.id] || wl || {};
     const title = getDisplayTitle(anime);
     const cover = getCover(anime);
-    const studios = (anime.studios?.nodes || []).map(s => s.name).join(', ') || 'Unknown Studio';
+    const studioNodes = anime.studios?.nodes || [];
+    const studiosHtml = studioNodes.length
+      ? studioNodes.map(s => `<a href="./index.html?tab=archives&amp;studio=${encodeURIComponent(s.name)}" style="color:var(--cyan);font-weight:600;">${escapeHtml(s.name)}</a>`).join(', ')
+      : 'Unknown Studio';
+    const sourceLabel = formatSourceLabel(anime.source);
+    const keyStaff = getKeyStaff(anime);
+    const topTags = getTopSubgenreTags(anime, 5);
     const platforms = detectPlatforms(anime);
     const dubLabel = classifyDub(anime, platforms);
     const freeAds = isFreeWithAds(anime, platforms);
@@ -1926,16 +1995,29 @@
           <div class="meta-row">
             ${anime.averageScore ? `<span class="badge badge-emerald">★ ${anime.averageScore}%</span>` : ''}
             ${anime.format ? `<span class="badge badge-accent">${escapeHtml(anime.format)}</span>` : ''}
+            ${sourceLabel ? `<span class="badge ${anime.source === 'ORIGINAL' ? 'badge-amber' : 'badge-purple'}">${anime.source === 'ORIGINAL' ? '★ Anime Original' : escapeHtml(sourceLabel)}</span>` : ''}
             ${anime.seasonYear ? `<span class="badge badge-muted">${escapeHtml(anime.season || '')} ${anime.seasonYear}</span>` : ''}
-            ${anime.episodes ? `<span class="badge badge-muted">${anime.episodes} eps</span>` : ''}
+            ${anime.episodes ? `<span class="badge badge-muted">${anime.episodes === 1 ? '1 ep' : anime.episodes + ' eps'}${anime.duration ? ' · ' + anime.duration + 'm' : ''}</span>` : ''}
             <span class="badge badge-cyan" title="Verified from AniList English voice actors or user override">${escapeHtml(dubLabel)}</span>
             ${freeAds ? `<span class="badge badge-amber">Free w/ Ads</span>` : ''}
             <span class="badge badge-muted">Pop: ${formatCompactNumber(anime.popularity)}</span>
           </div>
           <div style="font-size:12.5px;color:var(--text-muted);">
-            <strong>Studio:</strong> ${escapeHtml(studios)} &nbsp;•&nbsp; <strong>Genres:</strong> ${escapeHtml((anime.genres || []).join(', ') || '—')}
+            <strong>Studio:</strong> ${studiosHtml} &nbsp;•&nbsp; <strong>Genres:</strong> ${escapeHtml((anime.genres || []).join(', ') || '—')}
           </div>
-          <p style="margin:0;font-size:13px;color:#cbd5e1;max-height:150px;overflow-y:auto;white-space:pre-line;">
+          ${keyStaff.length ? `
+            <div class="meta-row" style="gap:6px;">
+              <span style="font-size:11.5px;color:var(--text-dim);font-weight:700;">STAFF:</span>
+              ${keyStaff.map(st => `<a class="badge badge-muted" href="./eclectic-lab.html?tab=auteur&amp;staff=${encodeURIComponent(st.name)}" title="Open in Auteur &amp; Staff Tree" style="text-decoration:none;"><strong style="color:var(--accent);">${escapeHtml(st.role)}:</strong>&nbsp;${escapeHtml(st.name)} ↗</a>`).join('')}
+            </div>
+          ` : ''}
+          ${topTags.length ? `
+            <div class="meta-row" style="gap:5px;">
+              <span style="font-size:11.5px;color:var(--text-dim);font-weight:700;">TAGS:</span>
+              ${topTags.map(t => `<a class="badge badge-accent" href="./vibe-graph.html?vibe=${encodeURIComponent(t)}" title="Explore #${escapeHtml(t)} in Taste Graph" style="text-decoration:none;">#${escapeHtml(t)}</a>`).join('')}
+            </div>
+          ` : ''}
+          <p style="margin:0;font-size:13px;color:#cbd5e1;max-height:150px;overflow-y:auto;padding-bottom:10px;white-space:pre-line;">
             ${escapeHtml(stripHtml(anime.description) || 'No synopsis available.')}
           </p>
           <div class="meta-row" style="margin-top:auto;">
@@ -2155,6 +2237,10 @@
     PLATFORM_CONFIG,
     PLATFORM_BY_ID,
     MEDIA_CARD_FIELDS,
+    formatSourceLabel,
+    getTopSubgenreTags,
+    getKeyStaff,
+    isSequelOrRecap,
     escapeHtml,
     stripHtml,
     getDisplayTitle,

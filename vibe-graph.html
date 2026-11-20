@@ -52,6 +52,10 @@
             <button type="button" class="pill active" id="layoutForceBtn">Force Layout</button>
             <button type="button" class="pill" id="layoutTsneBtn">Pure-JS t-SNE</button>
             <span style="color:var(--border-strong);">|</span>
+            <span style="font-size:11px;color:var(--text-dim);font-weight:700;">EDGES:</span>
+            <button type="button" class="pill active edge-mode-btn" data-mode="vibe">Vibe &amp; Tags</button>
+            <button type="button" class="pill edge-mode-btn" data-mode="lineage" title="Emphasize shared Director/Composer/Staff &amp; Studio genealogy">🧬 Staff &amp; Studio Lineage</button>
+            <span style="color:var(--border-strong);">|</span>
             <span style="font-size:11px;color:var(--text-dim);font-weight:700;">GEM CEILING:</span>
             <button type="button" class="pill active gem-btn" data-gem="0">All</button>
             <button type="button" class="pill gem-btn" data-gem="80000">&lt;80k</button>
@@ -212,6 +216,27 @@
         const panel = document.getElementById('dnaWeightsPanel');
         panel.hidden = !panel.hidden;
         ev.currentTarget.setAttribute('aria-expanded', String(!panel.hidden));
+      });
+
+      function applyEdgePreset(mode) {
+        const presets = {
+          vibe: { wTag: 40, wStaff: 18, wStudio: 12, wGenre: 12, wSem: 18 },
+          lineage: { wTag: 10, wStaff: 50, wStudio: 30, wGenre: 5, wSem: 5 }
+        };
+        const cfg = presets[mode] || presets.vibe;
+        for (const [id, val] of Object.entries(cfg)) {
+          const inp = document.getElementById(id);
+          const lbl = document.getElementById(id + 'Val');
+          if (inp) inp.value = String(val);
+          if (lbl) lbl.textContent = val + '%';
+        }
+        document.querySelectorAll('.edge-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+        recomputeGraphSimilarity();
+        AF.toast(mode === 'lineage' ? 'Switched to Staff & Studio Lineage weights (Staff 50% · Studio 30%).' : 'Switched to balanced Vibe & Tags weights.', 'info', 2200);
+      }
+
+      document.querySelectorAll('.edge-mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => applyEdgePreset(btn.dataset.mode));
       });
 
       // ----------------------------------------------------------------------
