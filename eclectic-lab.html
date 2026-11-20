@@ -93,8 +93,8 @@
         <div class="pills-row" id="curatedAuteursBar"></div>
       </div>
 
-      <div id="auteurHeader" class="panel" hidden style="margin-bottom:16px;"></div>
-      <div id="auteurBucketsBar" class="pills-row" style="margin-bottom:14px;"></div>
+      <div id="auteurHeader" class="panel" hidden style="margin-bottom:14px;"></div>
+      <div id="auteurBucketsBar" class="pills-row sticky-subbar" style="margin-bottom:14px;"></div>
       <div id="auteurGrid" class="anime-grid"></div>
     </section>
 
@@ -146,9 +146,10 @@
           </div>
         </div>
 
-        <!-- Synthesized DNA Preview -->
-        <div id="synthesizedDna" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--text-muted);"></div>
       </div>
+
+      <!-- Sticky Synthesized DNA Preview -->
+      <div id="synthesizedDna" class="sticky-subbar" style="margin-bottom:14px;font-size:12px;color:var(--text-muted);" hidden></div>
 
       <div id="arithmeticGrid" class="anime-grid"></div>
     </section>
@@ -823,11 +824,13 @@
         const grid = document.getElementById('arithmeticGrid');
         if (!eqTerms.length) {
           dnaBox.innerHTML = '';
+          dnaBox.hidden = true;
           grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">Add at least one positive term to solve.</div>`;
           return;
         }
 
         const dna = synthesizeDna();
+        dnaBox.hidden = false;
         dnaBox.innerHTML = `
           <div class="meta-row">
             <strong style="color:var(--text);">Synthesized DNA:</strong>
@@ -1095,7 +1098,9 @@
             const vars = { page };
             if (genre) vars.genre = genre;
             const data = await AF.anilistQuery(query, vars);
-            roulettePool = (data?.Page?.media || []).filter(m => m && m.description && m.description.length > 90);
+            const rawPool = (data?.Page?.media || []).filter(m => m && m.description && m.description.length > 90);
+            const entryPool = rawPool.filter(m => !AF.isSequelOrRecap(m));
+            roulettePool = entryPool.length >= 4 ? entryPool : rawPool;
           } catch (err) {
             stage.innerHTML = `<div class="empty-state">Roulette query failed: ${AF.escapeHtml(err.message)}</div>`;
             return;

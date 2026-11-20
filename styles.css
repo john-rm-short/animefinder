@@ -95,6 +95,9 @@ button {
 ::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.42); }
 
 /* Top Shared Navigation Bar */
+#af-nav-host {
+  display: contents;
+}
 .af-nav {
   position: sticky;
   top: 0;
@@ -644,7 +647,7 @@ button {
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 24px 8px 8px;
+  padding: 24px 76px 8px 8px;
   background: linear-gradient(transparent, rgba(9, 13, 26, 0.94));
   display: flex;
   flex-wrap: wrap;
@@ -691,13 +694,14 @@ button {
   background: rgba(15, 23, 42, 0.85);
 }
 
-/* 7-Day Mon–Sun Schedule Grid */
+/* 7-Day Mon–Sun Schedule Grid — Sticky day headers + independent vertical column scroll */
 .schedule-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(190px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(7, minmax(175px, 1fr));
+  gap: 10px;
   overflow-x: auto;
   padding-bottom: 8px;
+  scroll-behavior: smooth;
 }
 .schedule-col {
   background: var(--bg-elevated);
@@ -706,20 +710,29 @@ button {
   display: flex;
   flex-direction: column;
   min-height: 360px;
+  max-height: calc(100vh - 235px);
+  overflow: hidden;
 }
 .schedule-col.today {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.25);
 }
 .schedule-col-header {
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 3;
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(17, 24, 44, 0.96);
+  backdrop-filter: blur(8px);
 }
 .schedule-list {
+  flex: 1;
+  overflow-y: auto;
   padding: 8px;
   display: flex;
   flex-direction: column;
@@ -797,6 +810,79 @@ button {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  flex: 1;
+}
+.modal-footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  background: rgba(9, 13, 26, 0.94);
+  backdrop-filter: blur(8px);
+}
+.synopsis-clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.synopsis-toggle {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 600;
+}
+.synopsis-toggle:hover { text-decoration: underline; }
+
+/* Sticky sub-bars & Floating Back-to-Top button */
+.sticky-subbar {
+  position: sticky;
+  top: var(--nav-h);
+  z-index: 25;
+  background: rgba(9, 13, 26, 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.back-to-top-btn {
+  position: fixed;
+  bottom: 22px;
+  right: 22px;
+  z-index: 55;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border-radius: 99px;
+  border: 1px solid rgba(129, 140, 248, 0.55);
+  background: rgba(17, 24, 44, 0.92);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(10px);
+  transition: opacity 0.18s ease, transform 0.18s ease, background 0.15s;
+}
+.back-to-top-btn.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+.back-to-top-btn:hover {
+  background: var(--accent-strong);
 }
 .detail-hero {
   display: grid;
@@ -962,6 +1048,11 @@ button {
   border-bottom: 1px solid var(--border);
 }
 .af-table th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--bg-elevated);
+  box-shadow: 0 1px 0 var(--border-strong);
   color: var(--text-muted);
   font-size: 11.5px;
   text-transform: uppercase;
@@ -975,6 +1066,12 @@ button {
   grid-template-columns: 420px 1fr;
   gap: 20px;
   align-items: start;
+}
+@media (min-width: 1025px) {
+  .vibe-map-layout > .panel {
+    position: sticky;
+    top: calc(var(--nav-h) + 16px);
+  }
 }
 .quadrant-plane {
   position: relative;

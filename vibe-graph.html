@@ -832,9 +832,16 @@
             <button type="button" class="btn btn-xs" id="insFullModalBtn">Full Details</button>
           </div>
 
-          <p style="margin:0;font-size:12.5px;color:#cbd5e1;max-height:118px;overflow-y:auto;padding-bottom:10px;line-height:1.55;">
-            ${AF.escapeHtml(AF.stripHtml(a.description) || 'No synopsis available.')}
-          </p>
+          ${(() => {
+            const cleanSyn = AF.stripHtml(a.description || '').replace(/\s*(\(Source:[^)]+\)|\[Written by[^\]]+\])\s*/gi, ' ').trim() || 'No synopsis available.';
+            const longSyn = cleanSyn.length > 220;
+            return `
+              <p id="insSynopsis" class="${longSyn ? 'synopsis-clamped' : ''}" style="margin:0;font-size:12.5px;color:#cbd5e1;line-height:1.55;white-space:pre-line;">
+                ${AF.escapeHtml(cleanSyn)}
+              </p>
+              ${longSyn ? `<button type="button" class="synopsis-toggle" id="insSynToggle">Read full synopsis ▾</button>` : ''}
+            `;
+          })()}
 
           ${node.wikiText ? `
             <div class="detail-section" style="padding:10px;">
@@ -885,6 +892,15 @@
           </div>
         `;
 
+        const insSynBtn = host.querySelector('#insSynToggle');
+        if (insSynBtn) {
+          insSynBtn.addEventListener('click', () => {
+            const p = host.querySelector('#insSynopsis');
+            const expanded = !p.classList.contains('synopsis-clamped');
+            p.classList.toggle('synopsis-clamped', expanded);
+            insSynBtn.textContent = expanded ? 'Read full synopsis ▾' : 'Show less ▴';
+          });
+        }
         host.querySelector('#insExpandBtn').addEventListener('click', () => expandNodeNeighbors(node));
         host.querySelector('#insPinBtn').addEventListener('click', () => {
           node.pinned = !node.pinned;

@@ -1921,6 +1921,21 @@
     if (hasGist && state.settings.gistAutoSync) {
       gistPull({ silent: true });
     }
+
+    // Mount global floating Back-to-Top button for long scrollable views
+    if (!document.getElementById('af-back-to-top')) {
+      const btn = document.createElement('button');
+      btn.id = 'af-back-to-top';
+      btn.type = 'button';
+      btn.className = 'back-to-top-btn';
+      btn.setAttribute('aria-label', 'Back to top and filters');
+      btn.innerHTML = '↑ Top';
+      btn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+      document.body.appendChild(btn);
+      const toggleVis = () => btn.classList.toggle('visible', window.scrollY > 420);
+      window.addEventListener('scroll', toggleVis, { passive: true });
+      toggleVis();
+    }
   }
 
   // Accessible Modal Focus Management (P1)
@@ -1940,6 +1955,7 @@
           <button type="button" class="btn btn-sm" id="af-modal-close" aria-label="Close modal">✕ Close <span class="kbd">Esc</span></button>
         </div>
         <div class="modal-body" id="af-modal-body"></div>
+        <div class="modal-footer" id="af-modal-footer" hidden></div>
       </div>
     `;
     document.body.appendChild(backdrop);
@@ -1988,8 +2004,10 @@
     const backdrop = ensureDetailModal();
     const titleEl = backdrop.querySelector('#af-modal-title');
     const bodyEl = backdrop.querySelector('#af-modal-body');
+    const footerEl = backdrop.querySelector('#af-modal-footer');
     backdrop.classList.add('open');
     bodyEl.innerHTML = `<div class="empty-state"><span class="spinner"></span> Loading details...</div>`;
+    if (footerEl) { footerEl.innerHTML = ''; footerEl.hidden = true; }
     backdrop.querySelector('.modal-dialog').focus();
 
     let anime = typeof animeOrId === 'object' ? animeOrId : null;
@@ -2029,6 +2047,11 @@
     const ytTrailerId = anime.trailer?.site === 'youtube' ? anime.trailer.id : null;
     const justWatchUrl = `https://www.justwatch.com/us/search?q=${encodeURIComponent(title)}`;
 
+    const cleanSynopsis = stripHtml(anime.description || '')
+      .replace(/\s*(\(Source:[^)]+\)|\[Written by[^\]]+\])\s*/gi, ' ')
+      .trim() || 'No synopsis available.';
+    const isLongSynopsis = cleanSynopsis.length > 260;
+
     bodyEl.innerHTML = `
       <div class="detail-hero">
         <img class="detail-cover" src="${escapeHtml(cover)}" alt="${escapeHtml(title)} cover">
@@ -2058,9 +2081,10 @@
               ${topTags.map(t => `<a class="badge badge-accent" href="./vibe-graph.html?vibe=${encodeURIComponent(t)}" title="Explore #${escapeHtml(t)} in Taste Graph" style="text-decoration:none;">#${escapeHtml(t)}</a>`).join('')}
             </div>
           ` : ''}
-          <p style="margin:0;font-size:13px;color:#cbd5e1;max-height:150px;overflow-y:auto;padding-bottom:10px;white-space:pre-line;">
-            ${escapeHtml(stripHtml(anime.description) || 'No synopsis available.')}
+          <p id="af-modal-synopsis" class="${isLongSynopsis ? 'synopsis-clamped' : ''}" style="margin:0;font-size:13px;color:#cbd5e1;white-space:pre-line;line-height:1.55;">
+            ${escapeHtml(cleanSynopsis)}
           </p>
+          ${isLongSynopsis ? `<button type="button" class="synopsis-toggle" id="af-synopsis-toggle">Read full synopsis ▾</button>` : ''}
           <div class="meta-row" style="margin-top:auto;">
             <a class="btn btn-primary btn-sm" href="./vibe-graph.html?seed=${anime.id}">Explore in Taste Graph</a>
             <a class="btn btn-cyan btn-sm" href="./eclectic-lab.html?tab=arithmetic&seed=${anime.id}">Send to Arithmetic</a>
@@ -2117,20 +2141,35 @@
             <button type="button" class="pill ${ovr.customFreeWithAds ? 'active' : ''}" id="af-custom-free-ads">★ Free w/ Ads</button>
           </div>
         </div>
-        <div class="meta-row" style="margin-top:14px;">
-          <button type="button" class="btn btn-emerald" id="af-wl-save">${wl ? 'Update Watchlist' : '+ Add to Watchlist'}</button>
-          <button type="button" class="btn btn-sm" id="af-ovr-only">Save Platform/Dub Overrides Only</button>
-          ${wl ? `<button type="button" class="btn btn-danger btn-sm" id="af-wl-remove" style="margin-left:auto;">Remove from Watchlist</button>` : ''}
-        </div>
       </div>
 
       <div class="detail-section">
-        <h4>Streaming &amp; Multi-Source Metadata (Jikan · Kitsu · Shikimori · TVMaze · Wikipedia · TMDB US)</h4>
+        <h4>Streaming &amp; Multi-Source Metadata (Jikan · Kitsu · TVMaze · Wikipedia · TMDB US)</h4>
         <div id="af-multisrc-area" style="font-size:13px;color:var(--text-muted);">
-          <span class="spinner"></span> Querying Jikan v4, Kitsu, Shikimori, TVMaze, Wikipedia${state.settings.tmdbKey ? ' &amp; TMDB US' : ''}...
+          <span class="spinner"></span> Querying Jikan v4, Kitsu, TVMaze, Wikipedia${state.settings.tmdbKey ? ' &amp; TMDB US' : ''}...
         </div>
       </div>
     `;
+
+    // Sticky modal footer so Watchlist actions are always 1 click away on laptop viewports
+    if (footerEl) {
+      footerEl.hidden = false;
+      footerEl.innerHTML = `
+        <button type="button" class="btn btn-emerald" id="af-wl-save">${wl ? 'Update Watchlist' : '+ Add to Watchlist'}</button>
+        <button type="button" class="btn btn-sm" id="af-ovr-only">Save Platform/Dub Overrides Only</button>
+        ${wl ? `<button type="button" class="btn btn-danger btn-sm" id="af-wl-remove" style="margin-left:auto;">Remove from Watchlist</button>` : ''}
+      `;
+    }
+
+    const synToggle = bodyEl.querySelector('#af-synopsis-toggle');
+    if (synToggle) {
+      synToggle.addEventListener('click', () => {
+        const p = bodyEl.querySelector('#af-modal-synopsis');
+        const expanded = !p.classList.contains('synopsis-clamped');
+        p.classList.toggle('synopsis-clamped', expanded);
+        synToggle.textContent = expanded ? 'Read full synopsis ▾' : 'Show less ▴';
+      });
+    }
 
     // Wire official trailer toggle if available
     const trailerBtn = bodyEl.querySelector('#af-toggle-trailer');
@@ -2168,7 +2207,7 @@
       inp.value = String((Number(inp.value) || 0) + 1);
     });
 
-    bodyEl.querySelector('#af-wl-save').addEventListener('click', () => {
+    backdrop.querySelector('#af-wl-save').addEventListener('click', () => {
       upsertWatchlistItem(anime, {
         status: bodyEl.querySelector('#af-wl-status').value,
         rating: Number(bodyEl.querySelector('#af-wl-rating').value) || 0,
@@ -2182,7 +2221,7 @@
       closeDetailModal();
     });
 
-    bodyEl.querySelector('#af-ovr-only').addEventListener('click', () => {
+    backdrop.querySelector('#af-ovr-only').addEventListener('click', () => {
       updateOverrides(anime.id, {
         dubOverride: bodyEl.querySelector('#af-wl-dub').value,
         customPlatforms: Array.from(customSet),
@@ -2191,7 +2230,7 @@
       toast(`Saved streaming/dub overrides for "${title}".`, 'success');
     });
 
-    const remBtn = bodyEl.querySelector('#af-wl-remove');
+    const remBtn = backdrop.querySelector('#af-wl-remove');
     if (remBtn) {
       remBtn.addEventListener('click', () => {
         removeWatchlistItem(anime.id);

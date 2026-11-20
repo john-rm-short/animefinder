@@ -77,7 +77,7 @@
     <!-- TAB 2: 7-DAY SCHEDULE -->
     <section id="tab-schedule" class="tab-panel" role="tabpanel" hidden>
       <div class="panel" style="margin-bottom:16px;">
-        <div class="panel-header" style="margin-bottom:0;">
+        <div class="panel-header" style="margin-bottom:10px;">
           <div>
             <h2 class="panel-title">7-Day Local Broadcast Schedule (Mon – Sun)</h2>
             <div id="scheduleRangeLabel" style="font-size:12px;color:var(--text-muted);margin-top:2px;">Loading local week bounds...</div>
@@ -92,6 +92,7 @@
             <button type="button" class="btn btn-sm" id="refreshScheduleBtn">↻ Refresh</button>
           </div>
         </div>
+        <div class="pills-row" id="scheduleDayJumpBar" aria-label="Jump to day column"></div>
       </div>
       <div id="scheduleGrid" class="schedule-grid"></div>
     </section>
@@ -105,6 +106,7 @@
             <div id="watchlistSummary" style="font-size:12px;color:var(--text-muted);margin-top:2px;">0 titles saved in shared origin storage</div>
           </div>
           <div class="meta-row">
+            <a class="btn btn-sm" href="#savedSyncAnchor">↓ Sync &amp; Import</a>
             <a class="btn btn-primary btn-sm" href="./vibe-graph.html?mode=watchlist">Map Watchlist Constellation ↗</a>
             <select id="wlSortSelect" class="select" aria-label="Sort watchlist">
               <option value="updated">Sort: Recently Updated</option>
@@ -120,7 +122,7 @@
       <div id="watchlistGrid" class="anime-grid" style="margin-bottom:24px;"></div>
 
       <!-- Persistence, Gist Sync, AniList Importer & API Keys -->
-      <div class="grid-2">
+      <div class="grid-2" id="savedSyncAnchor" style="scroll-margin-top:80px;">
         <!-- Permanent Remote Storage: Private GitHub Gist Wizard -->
         <div class="panel" style="grid-column: 1 / -1;">
           <div class="panel-header">
@@ -241,12 +243,15 @@
             <h2 class="panel-title">Upcoming Anime Radar</h2>
             <div style="font-size:12px;color:var(--text-muted);">Most anticipated upcoming releases (<code>NOT_YET_RELEASED</code>)</div>
           </div>
-          <button type="button" class="btn btn-sm" id="refreshUpcomingBtn">↻ Refresh</button>
+          <div class="meta-row">
+            <a class="btn btn-sm btn-cyan" href="#radarFeedsAnchor">↓ ANN &amp; Trailers</a>
+            <button type="button" class="btn btn-sm" id="refreshUpcomingBtn">↻ Refresh</button>
+          </div>
         </div>
         <div id="upcomingGrid" class="anime-grid"></div>
       </div>
 
-      <div class="grid-2">
+      <div class="grid-2" id="radarFeedsAnchor" style="scroll-margin-top:80px;">
         <!-- ANN RSS -->
         <div class="panel">
           <div class="panel-header">
@@ -256,7 +261,7 @@
               <a class="btn btn-xs btn-cyan" href="https://www.animenewsnetwork.com/news/" target="_blank" rel="noopener">Open ANN ↗</a>
             </div>
           </div>
-          <div id="annNewsList" style="display:flex;flex-direction:column;gap:10px;max-height:460px;overflow-y:auto;"></div>
+          <div id="annNewsList" style="display:flex;flex-direction:column;gap:10px;max-height:440px;overflow-y:auto;"></div>
         </div>
 
         <!-- YouTube Hunter -->
@@ -275,7 +280,7 @@
             <button type="button" class="pill yt-preset" data-q="anime sakuga MAD animation">Sakuga</button>
             <button type="button" class="pill yt-preset" data-q="hidden gem anime recommendations">Hidden Gems</button>
           </div>
-          <div id="ytResultsList" style="display:flex;flex-direction:column;gap:10px;max-height:400px;overflow-y:auto;"></div>
+          <div id="ytResultsList" style="display:flex;flex-direction:column;gap:10px;max-height:440px;overflow-y:auto;"></div>
         </div>
       </div>
     </section>
@@ -852,12 +857,26 @@
         }
 
         const mediaById = new Map(scheduleCache.map(s => [s.media.id, s.media]));
+        const shortDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        const jumpBar = document.getElementById('scheduleDayJumpBar');
+        if (jumpBar) {
+          jumpBar.innerHTML = shortDays.map((sd, idx) => {
+            const isToday = idx === todayBucketIdx;
+            return `<button type="button" class="pill ${isToday ? 'active' : ''}" data-jump-day="${idx}">${sd}${isToday ? ' · Today' : ''} <span class="badge badge-muted">${buckets[idx].length}</span></button>`;
+          }).join('');
+          jumpBar.querySelectorAll('[data-jump-day]').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const col = grid.querySelector(`[data-day-col="${btn.dataset.jumpDay}"]`);
+              if (col) col.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+            });
+          });
+        }
 
         grid.innerHTML = dayNames.map((name, idx) => {
           const list = buckets[idx];
           const isToday = idx === todayBucketIdx;
           return `
-            <div class="schedule-col ${isToday ? 'today' : ''}">
+            <div class="schedule-col ${isToday ? 'today' : ''}" data-day-col="${idx}">
               <div class="schedule-col-header">
                 <strong style="font-size:13px;">${name}${isToday ? ' · Today' : ''}</strong>
                 <span class="badge ${isToday ? 'badge-accent' : 'badge-muted'}">${list.length}</span>
