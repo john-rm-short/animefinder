@@ -181,10 +181,27 @@
     return anime.title?.english || anime.title?.romaji || anime.title?.native || 'Untitled';
   }
 
+  // Strict URL scheme sanitizer: blocks javascript:, data:, vbscript:, etc.
+  function safeUrl(rawUrl, fallback = '#') {
+    if (!rawUrl || typeof rawUrl !== 'string') return fallback;
+    const trimmed = rawUrl.trim();
+    if (!trimmed) return fallback;
+    if (trimmed.startsWith('./') || trimmed.startsWith('/')) return trimmed;
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+        return parsed.href;
+      }
+    } catch {}
+    return fallback;
+  }
+
   function getCover(anime) {
     if (!anime) return '';
-    if (typeof anime.cover === 'string') return anime.cover;
-    return anime.coverImage?.large || anime.coverImage?.extraLarge || anime.coverImage?.medium || '';
+    const raw = typeof anime.cover === 'string'
+      ? anime.cover
+      : (anime.coverImage?.large || anime.coverImage?.extraLarge || anime.coverImage?.medium || '');
+    return safeUrl(raw, '');
   }
 
   function normalizeStatus(status) {
@@ -462,7 +479,7 @@
         out.watchlist[id] = {
           id,
           title: item.title || 'Untitled',
-          cover: item.cover || '',
+          cover: safeUrl(item.cover || '', ''),
           format: item.format || '',
           episodes: item.episodes ?? null,
           averageScore: item.averageScore ?? null,
@@ -513,7 +530,7 @@
       gistToken: (raw.settings?.gistToken ?? legacyGist.token ?? ''),
       gistId: (raw.settings?.gistId ?? legacyGist.gistId ?? legacyGist.id ?? ''),
       gistUser: raw.settings?.gistUser || '',
-      gistUrl: raw.settings?.gistUrl || '',
+      gistUrl: safeUrl(raw.settings?.gistUrl || '', ''),
       gistFilename: GIST_FILENAME,
       gistAutoSync: raw.settings?.gistAutoSync !== undefined ? Boolean(raw.settings.gistAutoSync) : true,
       tmdbKey: raw.settings?.tmdbKey ?? raw.tmdbKey ?? '',
@@ -2263,9 +2280,9 @@
             <a class="btn btn-primary btn-sm" href="./vibe-graph.html?seed=${anime.id}">Explore in Taste Graph</a>
             <a class="btn btn-cyan btn-sm" href="./eclectic-lab.html?tab=arithmetic&seed=${anime.id}">Send to Arithmetic</a>
             ${ytTrailerId ? `<button type="button" class="btn btn-sm" id="af-toggle-trailer">▶ Watch Official Trailer</button>` : ''}
-            <a class="btn btn-sm" href="${justWatchUrl}" target="_blank" rel="noopener">JustWatch US ↗</a>
-            <a class="btn btn-sm" href="https://anilist.co/anime/${anime.id}" target="_blank" rel="noopener">AniList ↗</a>
-            ${anime.idMal ? `<a class="btn btn-sm" href="https://myanimelist.net/anime/${anime.idMal}" target="_blank" rel="noopener">MAL ↗</a>` : ''}
+            <a class="btn btn-sm" href="${justWatchUrl}" target="_blank" rel="noopener noreferrer">JustWatch US ↗</a>
+            <a class="btn btn-sm" href="https://anilist.co/anime/${encodeURIComponent(anime.id)}" target="_blank" rel="noopener noreferrer">AniList ↗</a>
+            ${anime.idMal ? `<a class="btn btn-sm" href="https://myanimelist.net/anime/${encodeURIComponent(anime.idMal)}" target="_blank" rel="noopener noreferrer">MAL ↗</a>` : ''}
           </div>
           <div id="af-trailer-slot"></div>
         </div>
@@ -2580,7 +2597,7 @@
         <div class="meta-row" style="margin-bottom:12px;">
           <strong style="color:var(--text);">Where to Watch:</strong>
           ${streamLinks.length
-            ? streamLinks.map(s => `<a class="stream-link-chip" href="${escapeHtml(s.url)}" target="_blank" rel="noopener" style="border-color:${s.color};color:${s.color};">${escapeHtml(s.name)} ↗</a>`).join('')
+            ? streamLinks.map(s => `<a class="stream-link-chip" href="${escapeHtml(safeUrl(s.url))}" target="_blank" rel="noopener noreferrer" style="border-color:${s.color};color:${s.color};">${escapeHtml(s.name)} ↗</a>`).join('')
             : mergedPlatforms.length
               ? mergedPlatforms.map(p => `<span class="platform-tag" style="border-color:${p.color};color:${p.color};">${escapeHtml(p.name)}${p.freeWithAds ? ' (Free)' : ''}</span>`).join('')
               : '<span class="badge badge-muted">No direct links listed — check JustWatch US above or set custom overrides</span>'}
@@ -2596,9 +2613,9 @@
           <div class="panel" style="padding:10px;">
             <div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;">Verified Cross-DB Scores</div>
             <div style="font-size:12.5px;color:var(--text);margin-top:3px;">
-              Kitsu: ${multi.kitsu?.rating ? `<a href="${escapeHtml(multi.kitsu.url)}" target="_blank" rel="noopener">${multi.kitsu.rating}%</a>` : '—'} ·
-              TVMaze: ${multi.tvmaze?.rating ? `<a href="${escapeHtml(multi.tvmaze.url)}" target="_blank" rel="noopener">${multi.tvmaze.rating}</a>` : '—'}
-              ${multi.shikimori?.url ? ` · <a href="${escapeHtml(multi.shikimori.url)}" target="_blank" rel="noopener">Shikimori ↗</a>` : ''}
+              Kitsu: ${multi.kitsu?.rating ? `<a href="${escapeHtml(safeUrl(multi.kitsu.url))}" target="_blank" rel="noopener noreferrer">${multi.kitsu.rating}%</a>` : '—'} ·
+              TVMaze: ${multi.tvmaze?.rating ? `<a href="${escapeHtml(safeUrl(multi.tvmaze.url))}" target="_blank" rel="noopener noreferrer">${multi.tvmaze.rating}</a>` : '—'}
+              ${multi.shikimori?.url ? ` · <a href="${escapeHtml(safeUrl(multi.shikimori.url))}" target="_blank" rel="noopener noreferrer">Shikimori ↗</a>` : ''}
             </div>
             ${multi.tvmaze?.network ? `<div style="font-size:11.5px;">Network: ${escapeHtml(multi.tvmaze.network)}</div>` : ''}
           </div>
@@ -2616,7 +2633,7 @@
           <div class="panel" style="padding:10px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
               <span style="font-size:11px;color:var(--purple);text-transform:uppercase;">Wikipedia Extract</span>
-              <a href="${escapeHtml(multi.wikipedia.url)}" target="_blank" rel="noopener" style="font-size:11.5px;">Read article ↗</a>
+              <a href="${escapeHtml(safeUrl(multi.wikipedia.url))}" target="_blank" rel="noopener noreferrer" style="font-size:11.5px;">Read article ↗</a>
             </div>
             <p style="margin:0;font-size:12.5px;color:#cbd5e1;">${escapeHtml(multi.wikipedia.extract)}</p>
           </div>
@@ -2646,6 +2663,7 @@
     isSequelOrRecap,
     escapeHtml,
     stripHtml,
+    safeUrl,
     getDisplayTitle,
     getCover,
     normalizeStatus,
@@ -2669,6 +2687,7 @@
     updateOverrides,
     updateSettings,
     mergeRemotePayload,
+    buildPortableSyncPayload,
     gistPull,
     gistPush,
     gistCreateNew,
