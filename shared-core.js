@@ -420,6 +420,7 @@
     return {
       version: 2,
       updatedAt: 0,
+      dirtyForGist: false,
       watchlist: {},
       tombstones: {},
       overrides: {},
@@ -451,6 +452,7 @@
     const out = { ...raw };
     out.version = 2;
     out.updatedAt = Number(raw.updatedAt) || 0;
+    out.dirtyForGist = Boolean(raw.dirtyForGist);
     out.watchlist = {};
     if (raw.watchlist && typeof raw.watchlist === 'object') {
       for (const [k, item] of Object.entries(raw.watchlist)) {
@@ -476,12 +478,32 @@
           dubDay: item.dubDay !== undefined && item.dubDay !== null ? String(item.dubDay) : '',
           customPlatforms: Array.isArray(item.customPlatforms) ? item.customPlatforms : [],
           customFreeWithAds: Boolean(item.customFreeWithAds),
-          updatedAt: Number(item.updatedAt) || out.updatedAt || Date.now()
+          updatedAt: Number(item.updatedAt) || out.updatedAt || 0
         };
       }
     }
     out.tombstones = (raw.tombstones && typeof raw.tombstones === 'object') ? { ...raw.tombstones } : {};
-    out.overrides = (raw.overrides && typeof raw.overrides === 'object') ? { ...raw.overrides } : {};
+    out.overrides = {};
+    if (raw.overrides && typeof raw.overrides === 'object') {
+      for (const [k, ovr] of Object.entries(raw.overrides)) {
+        if (!ovr || typeof ovr !== 'object') continue;
+        const id = Number(ovr.id || k);
+        if (!id) continue;
+        out.overrides[id] = {
+          ...ovr,
+          status: ovr.status ? normalizeStatus(ovr.status) : undefined,
+          rating: ovr.rating !== undefined ? (Number(ovr.rating) || 0) : undefined,
+          progress: ovr.progress !== undefined ? Math.max(0, Number(ovr.progress) || 0) : undefined,
+          notes: typeof ovr.notes === 'string' ? ovr.notes : undefined,
+          dubOverride: ovr.dubOverride || '',
+          dubLag: (ovr.dubLag === '' || ovr.dubLag == null) ? null : Math.max(0, Number(ovr.dubLag)),
+          dubDay: ovr.dubDay !== undefined && ovr.dubDay !== null ? String(ovr.dubDay) : '',
+          customPlatforms: Array.isArray(ovr.customPlatforms) ? ovr.customPlatforms : [],
+          customFreeWithAds: Boolean(ovr.customFreeWithAds),
+          updatedAt: Number(ovr.updatedAt) || out.updatedAt || 0
+        };
+      }
+    }
 
     // Harmonize legacy gistConfig / gist shapes if present
     const legacyGist = raw.gistConfig || raw.gist || {};
@@ -506,13 +528,15 @@
   }
 
   // Non-destructive save: preserves any unknown keys already stored by extensions/tabs
-  function saveState(nextState, { triggerGist = false, notify = true } = {}) {
+  function saveState(nextState, { triggerGist = false, clearDirty = false, notify = true } = {}) {
     const existingRaw = readRawState();
+    const dirtyFlag = clearDirty ? false : (triggerGist ? true : Boolean(nextState.dirtyForGist ?? existingRaw.dirtyForGist));
     const merged = {
       ...existingRaw,
       ...nextState,
       version: 2,
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      dirtyForGist: dirtyFlag
     };
     try {
       localStorage.setItem(STATE_KEY, JSON.stringify(merged));
@@ -607,6 +631,10 @@
 
     // Mirror overrides cleanly
     state.overrides[id] = {
+      status: nextItem.status,
+      rating: nextItem.rating,
+      progress: nextItem.progress,
+      notes: nextItem.notes,
       dubOverride: nextItem.dubOverride,
       dubLag: nextItem.dubLag,
       dubDay: nextItem.dubDay,
@@ -634,7 +662,12 @@
     if (!id) return;
     const now = Date.now();
     const prev = state.overrides[id] || {};
+    const prevWl = state.watchlist[id] || {};
     const next = {
+      status: patch.status !== undefined ? normalizeStatus(patch.status) : (prev.status ?? prevWl.status),
+      rating: patch.rating !== undefined ? (Number(patch.rating) || 0) : (prev.rating ?? prevWl.rating),
+      progress: patch.progress !== undefined ? Math.max(0, Number(patch.progress) || 0) : (prev.progress ?? prevWl.progress),
+      notes: patch.notes !== undefined ? String(patch.notes) : (prev.notes ?? prevWl.notes),
       dubOverride: patch.dubOverride !== undefined ? patch.dubOverride : (prev.dubOverride || ''),
       dubLag: patch.dubLag !== undefined
         ? ((patch.dubLag === '' || patch.dubLag == null) ? null : Math.max(0, Number(patch.dubLag)))
@@ -646,7 +679,19 @@
     };
     state.overrides[id] = next;
     if (state.watchlist[id]) {
-      state.watchlist[id] = { ...state.watchlist[id], ...next, updatedAt: now };
+      state.watchlist[id] = {
+        ...state.watchlist[id],
+        status: next.status ?? state.watchlist[id].status,
+        rating: next.rating ?? state.watchlist[id].rating,
+        progress: next.progress ?? state.watchlist[id].progress,
+        notes: next.notes ?? state.watchlist[id].notes,
+        dubOverride: next.dubOverride,
+        dubLag: next.dubLag,
+        dubDay: next.dubDay,
+        customPlatforms: next.customPlatforms,
+        customFreeWithAds: next.customFreeWithAds,
+        updatedAt: now
+      };
     }
     saveState(state, { triggerGist: true });
   }
@@ -744,6 +789,7 @@
       if (!silent) toast('Configure GitHub PAT & Gist ID first.', 'warn');
       return null;
     }
+    const hadUnpushedLocalEdits = Boolean(state.dirtyForGist);
     setSyncStatus('syncing', 'Syncing...');
     try {
       const res = await fetch(`https://api.github.com/gists/${encodeURIComponent(gistId)}`, {
@@ -757,13 +803,21 @@
       const fileObj = gist.files?.[GIST_FILENAME] || gist.files?.[LEGACY_GIST_FILENAME];
       if (!fileObj || !fileObj.content) {
         setSyncStatus('synced', 'Gist Synced');
+        if (hadUnpushedLocalEdits) {
+          await gistPush({ silent: true });
+        }
         return state;
       }
       const remoteData = JSON.parse(fileObj.content);
+      const remoteTs = Number(remoteData?.updatedAt) || 0;
+      const localTs = Number(state.updatedAt) || 0;
       const merged = mergeRemotePayload(remoteData);
       merged.settings.lastGistSync = Date.now();
-      saveState(merged, { triggerGist: false });
+      saveState(merged, { triggerGist: false, clearDirty: !hadUnpushedLocalEdits });
       setSyncStatus('synced', 'Gist Synced');
+      if (hadUnpushedLocalEdits || localTs > remoteTs) {
+        await gistPush({ silent: true });
+      }
       if (!silent) toast(`Pulled ${Object.keys(merged.watchlist).length} watchlist titles from Gist.`, 'success');
       return merged;
     } catch (err) {
@@ -802,7 +856,7 @@
       });
       if (!res.ok) throw new Error(`GitHub API ${res.status}`);
       state.settings.lastGistSync = Date.now();
-      saveState(state, { triggerGist: false, notify: false });
+      saveState(state, { triggerGist: false, clearDirty: true, notify: false });
       setSyncStatus('synced', 'Gist Synced');
       if (!silent) toast('Pushed Watchlist & overrides to Private Gist.', 'success');
       return true;
@@ -934,7 +988,7 @@
     gistPushTimer = setTimeout(() => {
       gistPushTimer = null;
       gistPush({ silent: true });
-    }, 1500); // P0: 1.5s debounced auto-push
+    }, 600); // Fast 600ms debounced auto-push + dirtyForGist boot recovery
   }
 
   // Sync Codes & #sync= URL Hash (never exposes PAT or TMDB key)
@@ -2033,6 +2087,13 @@
   // Accessible Modal Focus Management (P1)
   let lastFocusedEl = null;
   let activeModalAnime = null;
+  let activeModalFlushFn = null;
+
+  global.addEventListener('beforeunload', () => {
+    if (typeof activeModalFlushFn === 'function') {
+      try { activeModalFlushFn(); } catch {}
+    }
+  });
 
   function ensureDetailModal() {
     let backdrop = document.getElementById('af-detail-modal-backdrop');
@@ -2081,6 +2142,10 @@
   }
 
   function closeDetailModal() {
+    if (typeof activeModalFlushFn === 'function') {
+      try { activeModalFlushFn(); } catch {}
+      activeModalFlushFn = null;
+    }
     const backdrop = document.getElementById('af-detail-modal-backdrop');
     if (!backdrop || !backdrop.classList.contains('open')) return;
     backdrop.classList.remove('open');
@@ -2121,6 +2186,10 @@
     const state = getState();
     const wl = state.watchlist[anime.id] || null;
     const ovr = state.overrides[anime.id] || wl || {};
+    const curStatus = wl?.status || ovr?.status || 'Plan to Watch';
+    const curRating = Number(wl?.rating ?? ovr?.rating ?? 0);
+    const curProgress = Number(wl?.progress ?? ovr?.progress ?? 0);
+    const curNotes = wl?.notes ?? ovr?.notes ?? '';
     const title = getDisplayTitle(anime);
     const cover = getCover(anime);
     const studioNodes = anime.studios?.nodes || [];
@@ -2203,25 +2272,28 @@
       </div>
 
       <div class="detail-section">
-        <h4>Watchlist &amp; Personal Tracking</h4>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <h4 style="margin:0;">Watchlist &amp; Personal Tracking</h4>
+          <span id="af-autosave-badge" class="badge badge-muted" style="font-size:11px;">Changes auto-save on edit</span>
+        </div>
         <div class="form-grid">
           <div class="form-field">
             <label for="af-wl-status">Status</label>
             <select id="af-wl-status" class="select">
-              ${WATCHLIST_STATUSES.map(st => `<option value="${st}" ${(wl?.status || 'Plan to Watch') === st ? 'selected' : ''}>${st}</option>`).join('')}
+              ${WATCHLIST_STATUSES.map(st => `<option value="${st}" ${curStatus === st ? 'selected' : ''}>${st}</option>`).join('')}
             </select>
           </div>
           <div class="form-field">
             <label for="af-wl-rating">Rating (0–10)</label>
             <select id="af-wl-rating" class="select">
               <option value="0">Unrated</option>
-              ${[10,9,8,7,6,5,4,3,2,1].map(r => `<option value="${r}" ${Number(wl?.rating) === r ? 'selected' : ''}>${r} / 10</option>`).join('')}
+              ${[10,9,8,7,6,5,4,3,2,1].map(r => `<option value="${r}" ${curRating === r ? 'selected' : ''}>${r} / 10</option>`).join('')}
             </select>
           </div>
           <div class="form-field">
             <label for="af-wl-progress">Episodes Watched</label>
             <div style="display:flex;gap:6px;">
-              <input id="af-wl-progress" type="number" min="0" max="${anime.episodes || 9999}" class="input input-full" value="${wl?.progress || 0}">
+              <input id="af-wl-progress" type="number" min="0" max="${anime.episodes || 9999}" class="input input-full" value="${curProgress}">
               <button type="button" class="btn btn-sm" id="af-wl-inc" title="Increment episode">+1</button>
             </div>
           </div>
@@ -2247,7 +2319,7 @@
         </div>
         <div class="form-field" style="margin-top:10px;">
           <label for="af-wl-notes">Personal Notes</label>
-          <textarea id="af-wl-notes" class="textarea" placeholder="Thoughts, arc reminders, why you added it...">${escapeHtml(wl?.notes || '')}</textarea>
+          <textarea id="af-wl-notes" class="textarea" placeholder="Thoughts, arc reminders, why you added it...">${escapeHtml(curNotes)}</textarea>
         </div>
         <div class="form-field" style="margin-top:10px;">
           <label>Custom Streaming Platform Overrides (for sparsely indexed services like OceanVeil)</label>
@@ -2304,26 +2376,11 @@
       });
     }
 
-    // Wire custom platform pills
+    // Wire custom platform pills & instant auto-save across all personal tracking fields
     const customSet = new Set(ovr.customPlatforms || []);
     let customFree = Boolean(ovr.customFreeWithAds);
-    bodyEl.querySelectorAll('#af-custom-platforms [data-pid]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const pid = btn.dataset.pid;
-        if (customSet.has(pid)) { customSet.delete(pid); btn.classList.remove('active'); }
-        else { customSet.add(pid); btn.classList.add('active'); }
-      });
-    });
-    const freeBtn = bodyEl.querySelector('#af-custom-free-ads');
-    freeBtn.addEventListener('click', () => {
-      customFree = !customFree;
-      freeBtn.classList.toggle('active', customFree);
-    });
-
-    bodyEl.querySelector('#af-wl-inc').addEventListener('click', () => {
-      const inp = bodyEl.querySelector('#af-wl-progress');
-      inp.value = String((Number(inp.value) || 0) + 1);
-    });
+    let modalAutoSaveTimer = null;
+    let pendingAutoSaveMode = null; // 'watchlist' | 'overrides'
 
     const readDubScheduleInputs = () => {
       const rawLag = bodyEl.querySelector('#af-wl-dublag')?.value.trim() ?? '';
@@ -2334,32 +2391,135 @@
       };
     };
 
-    backdrop.querySelector('#af-wl-save').addEventListener('click', () => {
-      upsertWatchlistItem(anime, {
-        status: bodyEl.querySelector('#af-wl-status').value,
-        rating: Number(bodyEl.querySelector('#af-wl-rating').value) || 0,
-        progress: Number(bodyEl.querySelector('#af-wl-progress').value) || 0,
-        notes: bodyEl.querySelector('#af-wl-notes').value,
-        ...readDubScheduleInputs(),
-        customPlatforms: Array.from(customSet),
-        customFreeWithAds: customFree
+    const readAllModalTrackingFields = () => ({
+      status: bodyEl.querySelector('#af-wl-status')?.value || 'Plan to Watch',
+      rating: Number(bodyEl.querySelector('#af-wl-rating')?.value) || 0,
+      progress: Math.max(0, Number(bodyEl.querySelector('#af-wl-progress')?.value) || 0),
+      notes: bodyEl.querySelector('#af-wl-notes')?.value ?? '',
+      ...readDubScheduleInputs(),
+      customPlatforms: Array.from(customSet),
+      customFreeWithAds: customFree
+    });
+
+    const markAutoSavedBadge = (labelText = '✓ Auto-saved') => {
+      const badge = bodyEl.querySelector('#af-autosave-badge');
+      if (badge) {
+        badge.className = 'badge badge-emerald';
+        badge.textContent = labelText;
+      }
+      const saveBtn = backdrop.querySelector('#af-wl-save');
+      if (saveBtn && getState().watchlist[anime.id]) {
+        saveBtn.textContent = '✓ Saved in Watchlist';
+      }
+    };
+
+    const persistModalChangesNow = (mode = 'watchlist') => {
+      if (modalAutoSaveTimer) {
+        clearTimeout(modalAutoSaveTimer);
+        modalAutoSaveTimer = null;
+      }
+      pendingAutoSaveMode = null;
+      if (!bodyEl.querySelector('#af-wl-status')) return;
+      const fields = readAllModalTrackingFields();
+      const inWl = Boolean(getState().watchlist[anime.id]);
+      if (mode === 'watchlist' || inWl) {
+        upsertWatchlistItem(anime, fields);
+        markAutoSavedBadge('✓ Auto-saved to Watchlist');
+      } else {
+        updateOverrides(anime.id, fields);
+        markAutoSavedBadge('✓ Overrides auto-saved');
+      }
+    };
+
+    const scheduleModalAutoSave = (mode = 'watchlist', immediate = false) => {
+      if (pendingAutoSaveMode !== 'watchlist') {
+        pendingAutoSaveMode = mode;
+      }
+      if (immediate) {
+        persistModalChangesNow(pendingAutoSaveMode);
+        return;
+      }
+      const badge = bodyEl.querySelector('#af-autosave-badge');
+      if (badge) {
+        badge.className = 'badge badge-cyan';
+        badge.textContent = 'Saving...';
+      }
+      if (modalAutoSaveTimer) clearTimeout(modalAutoSaveTimer);
+      modalAutoSaveTimer = setTimeout(() => {
+        persistModalChangesNow(pendingAutoSaveMode || mode);
+      }, 250);
+    };
+
+    activeModalFlushFn = () => {
+      if (modalAutoSaveTimer || pendingAutoSaveMode) {
+        persistModalChangesNow(pendingAutoSaveMode || 'watchlist');
+      }
+    };
+
+    bodyEl.querySelectorAll('#af-custom-platforms [data-pid]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const pid = btn.dataset.pid;
+        if (customSet.has(pid)) { customSet.delete(pid); btn.classList.remove('active'); }
+        else { customSet.add(pid); btn.classList.add('active'); }
+        scheduleModalAutoSave('overrides', true);
       });
+    });
+    const freeBtn = bodyEl.querySelector('#af-custom-free-ads');
+    freeBtn.addEventListener('click', () => {
+      customFree = !customFree;
+      freeBtn.classList.toggle('active', customFree);
+      scheduleModalAutoSave('overrides', true);
+    });
+
+    bodyEl.querySelector('#af-wl-inc').addEventListener('click', () => {
+      const inp = bodyEl.querySelector('#af-wl-progress');
+      inp.value = String((Number(inp.value) || 0) + 1);
+      scheduleModalAutoSave('watchlist', true);
+    });
+
+    // Attach instant auto-save listeners to all personal tracking & dub/schedule inputs
+    ['#af-wl-status', '#af-wl-rating'].forEach(sel => {
+      bodyEl.querySelector(sel)?.addEventListener('change', () => scheduleModalAutoSave('watchlist', true));
+    });
+    ['#af-wl-dub', '#af-wl-dubday'].forEach(sel => {
+      bodyEl.querySelector(sel)?.addEventListener('change', () => scheduleModalAutoSave('overrides', true));
+    });
+    const progInput = bodyEl.querySelector('#af-wl-progress');
+    if (progInput) {
+      progInput.addEventListener('input', () => scheduleModalAutoSave('watchlist', false));
+      progInput.addEventListener('change', () => scheduleModalAutoSave('watchlist', true));
+    }
+    const notesInput = bodyEl.querySelector('#af-wl-notes');
+    if (notesInput) {
+      notesInput.addEventListener('input', () => scheduleModalAutoSave('watchlist', false));
+      notesInput.addEventListener('blur', () => { if (modalAutoSaveTimer) persistModalChangesNow('watchlist'); });
+    }
+    const lagInput = bodyEl.querySelector('#af-wl-dublag');
+    if (lagInput) {
+      lagInput.addEventListener('input', () => scheduleModalAutoSave('overrides', false));
+      lagInput.addEventListener('change', () => scheduleModalAutoSave('overrides', true));
+    }
+
+    backdrop.querySelector('#af-wl-save').addEventListener('click', () => {
+      persistModalChangesNow('watchlist');
       toast(`Saved "${title}" to Watchlist.`, 'success');
       closeDetailModal();
     });
 
     backdrop.querySelector('#af-ovr-only').addEventListener('click', () => {
-      updateOverrides(anime.id, {
-        ...readDubScheduleInputs(),
-        customPlatforms: Array.from(customSet),
-        customFreeWithAds: customFree
-      });
+      persistModalChangesNow('overrides');
       toast(`Saved streaming & dub track overrides for "${title}".`, 'success');
     });
 
     const remBtn = backdrop.querySelector('#af-wl-remove');
     if (remBtn) {
       remBtn.addEventListener('click', () => {
+        if (modalAutoSaveTimer) {
+          clearTimeout(modalAutoSaveTimer);
+          modalAutoSaveTimer = null;
+        }
+        pendingAutoSaveMode = null;
+        activeModalFlushFn = null;
         removeWatchlistItem(anime.id);
         toast(`Removed "${title}" from Watchlist.`, 'warn');
         closeDetailModal();

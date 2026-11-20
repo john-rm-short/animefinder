@@ -1049,14 +1049,18 @@
           });
         }
 
-        // Populate settings inputs & Permanent Remote Storage Wizard state
+        // Populate settings inputs & Permanent Remote Storage Wizard state (do not clobber focused input)
         const hasToken = Boolean(state.settings.gistToken);
         const hasGist = Boolean(state.settings.gistToken && state.settings.gistId);
-        document.getElementById('gistTokenInput').value = state.settings.gistToken || '';
-        document.getElementById('gistIdInput').value = state.settings.gistId || '';
+        const setValIfNotFocused = (id, val) => {
+          const el = document.getElementById(id);
+          if (el && document.activeElement !== el) el.value = val;
+        };
+        setValIfNotFocused('gistTokenInput', state.settings.gistToken || '');
+        setValIfNotFocused('gistIdInput', state.settings.gistId || '');
         document.getElementById('gistAutoSyncCheck').checked = state.settings.gistAutoSync !== false;
-        document.getElementById('tmdbKeyInput').value = state.settings.tmdbKey || '';
-        document.getElementById('anilistImportUser').value = state.settings.anilistUsername || '';
+        setValIfNotFocused('tmdbKeyInput', state.settings.tmdbKey || '');
+        setValIfNotFocused('anilistImportUser', state.settings.anilistUsername || '');
 
         document.getElementById('wizStep1').classList.toggle('done', hasToken);
         document.getElementById('wizStep2').classList.toggle('done', hasGist);
@@ -1116,12 +1120,29 @@
         }
       });
 
-      document.getElementById('saveGistConfigBtn').addEventListener('click', () => {
+      const syncGistInputsToSettings = () => {
         AF.updateSettings({
           gistToken: document.getElementById('gistTokenInput').value.trim(),
           gistId: document.getElementById('gistIdInput').value.trim(),
           gistAutoSync: document.getElementById('gistAutoSyncCheck').checked
         });
+      };
+
+      ['gistTokenInput', 'gistIdInput'].forEach(id => {
+        const el = document.getElementById(id);
+        el.addEventListener('change', syncGistInputsToSettings);
+        el.addEventListener('blur', syncGistInputsToSettings);
+      });
+      document.getElementById('gistAutoSyncCheck').addEventListener('change', syncGistInputsToSettings);
+      document.getElementById('tmdbKeyInput').addEventListener('change', () => {
+        AF.updateSettings({ tmdbKey: document.getElementById('tmdbKeyInput').value.trim() });
+      });
+      document.getElementById('anilistImportUser').addEventListener('change', () => {
+        AF.updateSettings({ anilistUsername: document.getElementById('anilistImportUser').value.trim() });
+      });
+
+      document.getElementById('saveGistConfigBtn').addEventListener('click', () => {
+        syncGistInputsToSettings();
         AF.toast('Saved GitHub Gist configuration.', 'success');
         renderSavedTab();
       });
@@ -1132,8 +1153,16 @@
         renderSavedTab();
       });
 
-      document.getElementById('pullGistBtn').addEventListener('click', async () => { await AF.gistPull(); renderSavedTab(); });
-      document.getElementById('pushGistBtn').addEventListener('click', async () => { await AF.gistPush(); renderSavedTab(); });
+      document.getElementById('pullGistBtn').addEventListener('click', async () => {
+        syncGistInputsToSettings();
+        await AF.gistPull();
+        renderSavedTab();
+      });
+      document.getElementById('pushGistBtn').addEventListener('click', async () => {
+        syncGistInputsToSettings();
+        await AF.gistPush();
+        renderSavedTab();
+      });
 
       document.getElementById('importAnilistBtn').addEventListener('click', async () => {
         const btn = document.getElementById('importAnilistBtn');

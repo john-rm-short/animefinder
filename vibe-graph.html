@@ -797,7 +797,9 @@
         if (!node) return;
         const a = node.anime;
         const title = AF.getDisplayTitle(a);
-        const wl = AF.getState().watchlist[a.id];
+        const stNow = AF.getState();
+        const wl = stNow.watchlist[a.id] || stNow.overrides[a.id] || null;
+        const isInWatchlist = Boolean(stNow.watchlist[a.id]);
         const studios = (a.studios?.nodes || []).map(s => s.name).join(', ') || 'Unknown';
 
         // Top connected neighbors in current graph
@@ -850,9 +852,12 @@
             </div>
           ` : ''}
 
-          <!-- Inline Watchlist Editor (Harmonized On Hold) -->
+          <!-- Inline Watchlist Editor (Harmonized On Hold + Instant Auto-Save) -->
           <div class="detail-section" style="padding:12px;">
-            <h4>Inline Watchlist Editor</h4>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px;">
+              <h4 style="margin:0;">Inline Watchlist Editor</h4>
+              <span id="insAutosaveBadge" class="badge badge-muted" style="font-size:10.5px;">Auto-saves</span>
+            </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
               <div class="form-field">
                 <label for="insWlStatus">Status</label>
@@ -875,8 +880,8 @@
             </div>
             <textarea id="insWlNotes" class="textarea" style="min-height:54px;margin-bottom:8px;" placeholder="Notes...">${AF.escapeHtml(wl?.notes || '')}</textarea>
             <div class="meta-row">
-              <button type="button" class="btn btn-emerald btn-xs" id="insWlSaveBtn">${wl ? 'Save Changes' : '+ Add to Watchlist'}</button>
-              ${wl ? `<button type="button" class="btn btn-danger btn-xs" id="insWlRemoveBtn">Remove</button>` : ''}
+              <button type="button" class="btn btn-emerald btn-xs" id="insWlSaveBtn">${isInWatchlist ? 'Save Changes' : '+ Add to Watchlist'}</button>
+              ${isInWatchlist ? `<button type="button" class="btn btn-danger btn-xs" id="insWlRemoveBtn">Remove</button>` : ''}
             </div>
           </div>
 
@@ -926,17 +931,41 @@
           }
         });
 
-        host.querySelector('#insWlSaveBtn').addEventListener('click', () => {
+        let insSaveTimer = null;
+        const saveInspectorFields = (showToast = false) => {
+          if (insSaveTimer) { clearTimeout(insSaveTimer); insSaveTimer = null; }
+          if (!host.querySelector('#insWlStatus')) return;
           AF.upsertWatchlistItem(a, {
             status: host.querySelector('#insWlStatus').value,
             rating: Number(host.querySelector('#insWlRating').value) || 0,
             progress: Number(host.querySelector('#insWlProg').value) || 0,
             notes: host.querySelector('#insWlNotes').value
           });
-          AF.toast(`Saved "${title}" to shared Watchlist!`, 'success');
-          renderInspector(node.id);
+          const b = host.querySelector('#insAutosaveBadge');
+          if (b) { b.className = 'badge badge-emerald'; b.textContent = '✓ Auto-saved'; }
+          const btn = host.querySelector('#insWlSaveBtn');
+          if (btn) btn.textContent = '✓ Saved';
           renderNodeTable();
+          if (showToast) {
+            AF.toast(`Saved "${title}" to shared Watchlist!`, 'success');
+            renderInspector(node.id);
+          }
+        };
+
+        host.querySelector('#insWlStatus').addEventListener('change', () => saveInspectorFields(false));
+        host.querySelector('#insWlRating').addEventListener('change', () => saveInspectorFields(false));
+        host.querySelector('#insWlProg').addEventListener('change', () => saveInspectorFields(false));
+        host.querySelector('#insWlProg').addEventListener('input', () => {
+          if (insSaveTimer) clearTimeout(insSaveTimer);
+          insSaveTimer = setTimeout(() => saveInspectorFields(false), 300);
         });
+        host.querySelector('#insWlNotes').addEventListener('input', () => {
+          if (insSaveTimer) clearTimeout(insSaveTimer);
+          insSaveTimer = setTimeout(() => saveInspectorFields(false), 300);
+        });
+        host.querySelector('#insWlNotes').addEventListener('blur', () => saveInspectorFields(false));
+
+        host.querySelector('#insWlSaveBtn').addEventListener('click', () => saveInspectorFields(true));
 
         const rem = host.querySelector('#insWlRemoveBtn');
         if (rem) {
@@ -1412,7 +1441,9 @@
       });
 
       AF.onStateChange(() => {
-        if (selectedId) renderInspector(selectedId);
+        const activeId = document.activeElement?.id || '';
+        const isEditingInspector = ['insWlStatus', 'insWlRating', 'insWlProg', 'insWlNotes'].includes(activeId);
+        if (selectedId && !isEditingInspector) renderInspector(selectedId);
         renderNodeTable();
         requestDraw();
       });
