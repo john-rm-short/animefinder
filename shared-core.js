@@ -25,7 +25,7 @@
     'Dropped'
   ];
 
-  const DUB_OPTIONS = ['', 'EN Dub', 'Simuldub', 'Sub Only'];
+  const DUB_OPTIONS = ['', 'EN Dub', 'Staggered Dub', 'Simuldub', 'Sub Only'];
 
   // Centralized 11-platform registry resolving Crunchyroll/HIDIVE bias
   // licensedByValues covers exact AniList ExternalLink/licensedBy strings
@@ -1112,7 +1112,8 @@
     return verifiedDubMap;
   }
 
-  // Factual dub classifier: honors user override first, then verified EN VA check
+  // Factual dub classifier: honors user override first, then verified EN VA check.
+  // Never assumes same-day "Simuldub" on releasing shows since most ongoing dubs are staggered behind sub broadcasts.
   function classifyDub(anime) {
     const state = getState();
     const id = Number(anime?.id);
@@ -1126,7 +1127,7 @@
       hasEnVa = extractHasEnDub(anime) === true;
     }
     if (hasEnVa) {
-      return anime?.status === 'RELEASING' ? 'Simuldub' : 'EN Dub';
+      return anime?.status === 'RELEASING' ? 'EN Dub (Ongoing)' : 'EN Dub';
     }
     return 'Sub / No EN VA';
   }

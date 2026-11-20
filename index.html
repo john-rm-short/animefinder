@@ -60,7 +60,7 @@
             </select>
             <select id="dubFilterSelect" class="select" aria-label="Filter by Dub status">
               <option value="all">Audio: All</option>
-              <option value="dubbed">Verified EN Dub / Simuldub</option>
+              <option value="dubbed">Verified EN Dub</option>
               <option value="sub">Sub / No EN VA Listed</option>
             </select>
             <button type="button" class="btn btn-sm" id="toggleCompactBtn" title="Toggle compact card grid">⊞ Compact</button>
@@ -484,7 +484,10 @@
 
         const bottomBadges = [];
         if (dub !== 'Sub / No EN VA') {
-          bottomBadges.push(`<span class="badge badge-cyan" title="Verified English voice cast on AniList or override">${AF.escapeHtml(dub)}</span>`);
+          const dubTip = dub === 'EN Dub (Ongoing)'
+            ? 'English voice cast confirmed on AniList — ongoing dubs often release on a staggered schedule behind Japanese episodes'
+            : 'Verified English voice cast on AniList or manual override';
+          bottomBadges.push(`<span class="badge badge-cyan" title="${dubTip}">${AF.escapeHtml(dub)}</span>`);
         }
         if (anime.source === 'ORIGINAL') {
           bottomBadges.push(`<span class="badge badge-amber" title="Anime Original production">★ Original</span>`);
@@ -692,7 +695,7 @@
             if (!platforms.some(p => p.id === activePlatform) && !m._inCatalog) return false;
           }
           const dub = AF.classifyDub(m);
-          const isDubbed = dub === 'EN Dub' || dub === 'Simuldub';
+          const isDubbed = dub !== 'Sub / No EN VA' && dub !== 'Sub Only';
           if (activeDubFilter === 'dubbed' && !isDubbed) return false;
           if (activeDubFilter === 'sub' && isDubbed) return false;
 
