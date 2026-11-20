@@ -628,7 +628,7 @@
         if (licensedByList) vars.licensed = licensedByList;
 
         try {
-          const cacheKey = forceRefresh ? null : `releases_v2_${activePlatform}`;
+          const cacheKey = forceRefresh ? null : `releases_v3_${activePlatform}`;
           const data = await AF.anilistQuery(query, vars, { cacheKey, ttl: AF.TTL_DYNAMIC });
 
           const mergedMap = new Map();

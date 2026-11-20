@@ -1042,108 +1042,77 @@
   }
 
   // Verified EN Dub cache (in-memory + 24h IndexedDB).
-  // Note: AniList returns voiceActors=null when combined with sort:[ROLE,FAVOURITES] or inside Page{media}.
-  // Distinguishing null (unresolved) from [] (confirmed no EN VA) + falling back to unaliased Media(id) guarantees 100% accuracy!
+  // CRITICAL AniList GraphQL quirk: CharacterEdge.voiceActors returns null unless `node { id }` is also selected inside `edges`!
   const verifiedDubMap = new Map(); // animeId -> boolean
 
-  async function verifySingleMediaDub(id) {
-    const query = `
-      query ($id: Int) {
-        Media(id: $id, type: ANIME) {
-          id
-          characters(perPage: 6, role: MAIN) {
-            edges {
-              voiceActors(language: ENGLISH) { id }
-            }
-          }
-        }
-      }
-    `;
-    try {
-      const data = await anilistQuery(query, { id: Number(id) });
-      const edges = data?.Media?.characters?.edges || [];
-      // Only cache if voiceActors actually resolved (Array, not null)
-      const resolved = edges.length === 0 || edges.some(e => Array.isArray(e?.voiceActors));
-      if (!resolved) return null;
-      const hasEnDub = edges.some(e => Array.isArray(e?.voiceActors) && e.voiceActors.length > 0);
-      verifiedDubMap.set(Number(id), hasEnDub);
-      await cacheSet(`dub_en_v2_${id}`, { hasEnDub }, TTL_STABLE);
-      return hasEnDub;
-    } catch {
-      return null;
-    }
+  function extractHasEnDub(anime) {
+    const edges = anime?.characters?.edges;
+    if (!Array.isArray(edges)) return null;
+    if (edges.length > 0 && edges.every(e => e?.voiceActors === null)) return null;
+    return edges.some(e => Array.isArray(e?.voiceActors) && e.voiceActors.length > 0);
   }
 
-  async function verifyDubStatusBatch(animeList, { maxUnaliasedFallback = 18 } = {}) {
-    const ids = Array.from(new Set(
-      (animeList || []).map(a => Number(a?.id || a)).filter(id => id > 0)
-    ));
-    if (!ids.length) return verifiedDubMap;
-
+  async function verifyDubStatusBatch(animeList) {
+    const list = Array.isArray(animeList) ? animeList : [];
     const toFetch = [];
-    for (const id of ids) {
+
+    for (const item of list) {
+      const id = Number(item?.id || item);
+      if (!id) continue;
+      // First check if the media payload itself already has resolved voiceActors
+      if (typeof item === 'object') {
+        const inlineVal = extractHasEnDub(item);
+        if (typeof inlineVal === 'boolean') {
+          verifiedDubMap.set(id, inlineVal);
+          continue;
+        }
+      }
       if (verifiedDubMap.has(id)) continue;
-      const cached = await cacheGet(`dub_en_v2_${id}`);
+      const cached = await cacheGet(`dub_en_v3_${id}`);
       if (cached && typeof cached.hasEnDub === 'boolean') {
         verifiedDubMap.set(id, cached.hasEnDub);
-      } else {
+      } else if (!toFetch.includes(id)) {
         toFetch.push(id);
       }
     }
     if (!toFetch.length) return verifiedDubMap;
 
-    // Single-item request (e.g., Detail Modal): go straight to unaliased root Media(id)
-    if (toFetch.length === 1) {
-      await verifySingleMediaDub(toFetch[0]);
-      return verifiedDubMap;
-    }
-
-    // Try fast aliased batch WITHOUT sort:[ROLE,FAVOURITES] (uses role:MAIN instead)
-    const unresolved = [];
-    const chunkSize = 20;
-    for (let start = 0; start < toFetch.length; start += chunkSize) {
-      const slice = toFetch.slice(start, start + chunkSize);
-      const aliases = slice.map((id, idx) => `
-        m${idx}: Media(id: ${id}, type: ANIME) {
-          id
-          characters(perPage: 5, role: MAIN) {
-            edges {
-              voiceActors(language: ENGLISH) { id }
+    // Resolve up to 50 titles per SINGLE Page(id_in) request — with `node { id }` inside edges so AniList returns real EN VAs!
+    const query = `
+      query ($ids: [Int]) {
+        Page(page: 1, perPage: 50) {
+          media(id_in: $ids, type: ANIME) {
+            id
+            characters(perPage: 5, role: MAIN) {
+              edges {
+                node { id }
+                voiceActors(language: ENGLISH) { id }
+              }
             }
           }
         }
-      `).join('\n');
+      }
+    `;
+    for (let start = 0; start < toFetch.length; start += 50) {
+      const slice = toFetch.slice(start, start + 50);
       try {
-        const data = await anilistQuery(`query { ${aliases} }`);
-        for (const m of Object.values(data || {})) {
+        const data = await anilistQuery(query, { ids: slice });
+        for (const m of (data?.Page?.media || [])) {
           if (!m || !m.id) continue;
-          const edges = m.characters?.edges || [];
-          const hasNullVa = edges.length > 0 && edges.every(e => e?.voiceActors === null);
-          if (hasNullVa) {
-            unresolved.push(m.id);
-          } else {
-            const hasEnDub = edges.some(e => Array.isArray(e?.voiceActors) && e.voiceActors.length > 0);
+          const hasEnDub = extractHasEnDub(m);
+          if (typeof hasEnDub === 'boolean') {
             verifiedDubMap.set(m.id, hasEnDub);
-            await cacheSet(`dub_en_v2_${m.id}`, { hasEnDub }, TTL_STABLE);
+            await cacheSet(`dub_en_v3_${m.id}`, { hasEnDub }, TTL_STABLE);
           }
         }
       } catch (err) {
         console.warn('Batch EN dub verification warning:', err.message);
       }
     }
-
-    // If AniList dropped voiceActors to null in the aliased batch, run throttled unaliased Media(id) calls
-    if (unresolved.length) {
-      const targets = unresolved.slice(0, maxUnaliasedFallback);
-      const concurrency = 4;
-      for (let i = 0; i < targets.length; i += concurrency) {
-        await Promise.all(targets.slice(i, i + concurrency).map(id => verifySingleMediaDub(id)));
-      }
-    }
     return verifiedDubMap;
   }
 
-  // Factual dub classifier: honors user override first, then verified root-Media EN VA check
+  // Factual dub classifier: honors user override first, then verified EN VA check
   function classifyDub(anime) {
     const state = getState();
     const id = Number(anime?.id);
@@ -1154,8 +1123,7 @@
     if (id && verifiedDubMap.has(id)) {
       hasEnVa = verifiedDubMap.get(id);
     } else {
-      const edges = anime?.characters?.edges || [];
-      hasEnVa = edges.some(e => Array.isArray(e?.voiceActors) && e.voiceActors.length > 0);
+      hasEnVa = extractHasEnDub(anime) === true;
     }
     if (hasEnVa) {
       return anime?.status === 'RELEASING' ? 'Simuldub' : 'EN Dub';
@@ -1198,7 +1166,13 @@
         node { id }
       }
     }
-    staff(perPage: 15, sort: RELEVANCE) {
+    characters(perPage: 4, role: MAIN) {
+      edges {
+        node { id }
+        voiceActors(language: ENGLISH) { id }
+      }
+    }
+    staff(perPage: 25, sort: RELEVANCE) {
       edges {
         role
         node { id name { full } }
@@ -1305,7 +1279,7 @@
   async function fetchAnimeById(id) {
     const query = `query ($id: Int) { Media(id: $id, type: ANIME) { ${MEDIA_CARD_FIELDS} } }`;
     const data = await anilistQuery(query, { id: Number(id) }, {
-      cacheKey: `anilist_media_${id}`,
+      cacheKey: `anilist_media_v3_${id}`,
       ttl: TTL_STABLE
     });
     return data?.Media || null;
@@ -1732,7 +1706,7 @@
 
   async function fetchWikipediaSummary(title, altTitles = []) {
     if (!title) return null;
-    const cacheKey = `wiki_v2_${title.toLowerCase()}`;
+    const cacheKey = `wiki_v3_${title.toLowerCase()}`;
     const cached = await cacheGet(cacheKey);
     if (cached) return cached;
 
@@ -1754,13 +1728,30 @@
       return null;
     };
 
-    // Use MediaWiki opensearch first (always HTTP 200, avoids browser 404 console noise on disambiguation guesses)
-    const search = await fetchJsonSafe(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(title + ' anime')}&limit=4&format=json&origin=*`);
-    const searchCandidates = Array.isArray(search?.[1]) ? search[1] : [];
+    // Use MediaWiki opensearch (always HTTP 200, zero 404 console errors) and skip "List of..." / "Episodes of..." articles
+    const search = await fetchJsonSafe(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(title)}&limit=6&format=json&origin=*`);
+    const searchAnime = await fetchJsonSafe(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(title + ' anime')}&limit=4&format=json&origin=*`);
+    const rawCandidates = [
+      ...(Array.isArray(search?.[1]) ? search[1] : []),
+      ...(Array.isArray(searchAnime?.[1]) ? searchAnime[1] : [])
+    ].filter(c => c && !/^(list of|episodes of|characters of|music of)\b/i.test(c));
+
+    // Prefer exact title or "(anime)" over "(manga)" or spin-offs
+    rawCandidates.sort((a, b) => {
+      const score = (s) => {
+        const sl = s.toLowerCase();
+        if (sl === title.toLowerCase()) return 3;
+        if (sl.includes('(anime)')) return 2.5;
+        if (sl.includes('(tv series)') || sl.includes('(film)')) return 2;
+        return 1;
+      };
+      return score(b) - score(a);
+    });
+
     const seenWiki = new Set();
     let result = null;
-    for (const c of [...searchCandidates, title]) {
-      if (!c || seenWiki.has(c.toLowerCase())) continue;
+    for (const c of rawCandidates) {
+      if (seenWiki.has(c.toLowerCase())) continue;
       seenWiki.add(c.toLowerCase());
       result = await trySummary(c);
       if (result) break;
